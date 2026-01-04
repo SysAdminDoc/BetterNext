@@ -29,7 +29,7 @@ A powerful Chrome extension that supercharges your NextDNS experience with an en
 
 ### 🎨 Modern UI
 - Dark theme optimized
-- Glassmorphism effects
+- Blue gradient branding
 - Smooth animations
 - Responsive design
 
@@ -43,7 +43,7 @@ A powerful Chrome extension that supercharges your NextDNS experience with an en
 
 ### From Source (Developer Mode)
 
-1. Download or clone this repository
+1. Download or clone this repository from [GitHub](https://github.com/SysAdminDoc/BetterNext)
 2. Open Chrome and go to `chrome://extensions/`
 3. Enable "Developer mode" (toggle in top right)
 4. Click "Load unpacked"
@@ -57,6 +57,20 @@ A powerful Chrome extension that supercharges your NextDNS experience with an en
 3. Click "🚀 Take Me There!" when prompted
 4. Click "✨ Capture Key & Continue ✨" on your account page
 5. Done! Your API key is automatically configured.
+
+## Extension Structure
+
+```
+betternext-extension/
+├── manifest.json      # Chrome extension configuration
+├── background.js      # Service worker for API requests
+├── content.js         # Main extension code
+├── icons/
+│   ├── icon16.png
+│   ├── icon48.png
+│   └── icon128.png
+└── README.md
+```
 
 ## Permissions Explained
 
@@ -72,6 +86,10 @@ If you find BetterNext useful, consider supporting NextDNS with a Pro subscripti
 ## License
 
 MIT License - See LICENSE file for details.
+
+## Links
+
+- **GitHub**: [https://github.com/SysAdminDoc/BetterNext](https://github.com/SysAdminDoc/BetterNext)
 
 ## Credits
 

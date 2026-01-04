@@ -1,6 +1,6 @@
 /**
  * BetterNext - Enhanced NextDNS Control Panel
- * Chrome Extension v1.0.0
+ * Chrome Extension v1.0.4
  * 
  * Enhanced control panel for NextDNS with condensed view, quick actions,
  * keyboard shortcuts, and consistent UI state across pages.
@@ -55,7 +55,7 @@ function addGlobalStyle(css) {
     const KEY_HIDDEN_DOMAINS = `${KEY_PREFIX}hidden_domains_v2`;
     const KEY_LOCK_STATE = `${KEY_PREFIX}lock_state_v1`;
     const KEY_THEME = `${KEY_PREFIX}theme_v1`;
-    const KEY_WIDTH = `${KEY_PREFIX}panel_width_v1`;
+    const KEY_WIDTH = `${KEY_PREFIX}panel_width_v2`;
     const KEY_API_KEY = `${KEY_PREFIX}api_key`;
     const KEY_PROFILE_ID = `${KEY_PREFIX}profile_id_v1`;
     const KEY_DOMAIN_ACTIONS = `${KEY_PREFIX}domain_actions_v1`;
@@ -92,7 +92,7 @@ function addGlobalStyle(css) {
     let domainActions = {};
     let autoRefreshInterval = null;
     let currentTheme = 'dark';
-    let panelWidth = 240;
+    let panelWidth = 650;
     let isPreloadingCancelled = false;
     let enableListPageTheme = true;
     let listPageThemeStyleElement = null;
@@ -166,93 +166,93 @@ function addGlobalStyle(css) {
     // --- INJECTED CSS ---
     addGlobalStyle(`
         :root, html[data-bn-theme="dark"] {
-            --panel-bg: rgba(22, 22, 26, 0.95);
-            --panel-bg-solid: #16161a;
-            --panel-text: #fffffe;
-            --panel-text-secondary: #94a1b2;
-            --panel-header-bg: rgba(32, 32, 38, 0.98);
-            --panel-border: rgba(148, 161, 178, 0.1);
-            --btn-bg: rgba(148, 161, 178, 0.1);
-            --btn-hover-bg: rgba(148, 161, 178, 0.2);
-            --btn-border: rgba(148, 161, 178, 0.15);
-            --btn-active-bg: linear-gradient(135deg, #7f5af0 0%, #6246ea 100%);
-            --scrollbar-track: rgba(148, 161, 178, 0.05);
-            --scrollbar-thumb: rgba(148, 161, 178, 0.2);
-            --handle-color: #7f5af0;
-            --input-bg: rgba(148, 161, 178, 0.08);
-            --input-text: #fffffe;
-            --input-border: rgba(148, 161, 178, 0.15);
-            --input-focus: #7f5af0;
-            --success-color: #2cb67d;
-            --danger-color: #e53170;
-            --info-color: #7f5af0;
-            --warning-color: #ffc857;
-            --section-bg: rgba(148, 161, 178, 0.05);
-            --accent-color: #7f5af0;
-            --accent-secondary: #2cb67d;
-            --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
-            --glow-color: rgba(127, 90, 240, 0.15);
+            --panel-bg: rgba(18, 22, 30, 0.95);
+            --panel-bg-solid: #12161e;
+            --panel-text: #f0f4f8;
+            --panel-text-secondary: #8899a6;
+            --panel-header-bg: rgba(26, 32, 44, 0.98);
+            --panel-border: rgba(53, 132, 228, 0.15);
+            --btn-bg: rgba(53, 132, 228, 0.1);
+            --btn-hover-bg: rgba(53, 132, 228, 0.2);
+            --btn-border: rgba(53, 132, 228, 0.2);
+            --btn-active-bg: linear-gradient(135deg, #1a5fb4 0%, #3584e4 100%);
+            --scrollbar-track: rgba(53, 132, 228, 0.05);
+            --scrollbar-thumb: rgba(53, 132, 228, 0.3);
+            --handle-color: #3584e4;
+            --input-bg: rgba(53, 132, 228, 0.08);
+            --input-text: #f0f4f8;
+            --input-border: rgba(53, 132, 228, 0.2);
+            --input-focus: #62a0ea;
+            --success-color: #2ec27e;
+            --danger-color: #e01b24;
+            --info-color: #3584e4;
+            --warning-color: #f5c211;
+            --section-bg: rgba(53, 132, 228, 0.05);
+            --accent-color: #3584e4;
+            --accent-secondary: #62a0ea;
+            --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --glow-color: rgba(53, 132, 228, 0.2);
         }
         html[data-bn-theme="light"] {
             --panel-bg: rgba(255, 255, 255, 0.95);
             --panel-bg-solid: #ffffff;
-            --panel-text: #16161a;
+            --panel-text: #1a1a2e;
             --panel-text-secondary: #555b6e;
             --panel-header-bg: rgba(248, 249, 252, 0.98);
-            --panel-border: rgba(22, 22, 26, 0.08);
-            --btn-bg: rgba(22, 22, 26, 0.05);
-            --btn-hover-bg: rgba(22, 22, 26, 0.1);
-            --btn-border: rgba(22, 22, 26, 0.1);
-            --btn-active-bg: linear-gradient(135deg, #6246ea 0%, #7f5af0 100%);
-            --scrollbar-track: rgba(22, 22, 26, 0.03);
-            --scrollbar-thumb: rgba(22, 22, 26, 0.15);
-            --input-bg: rgba(22, 22, 26, 0.04);
-            --input-text: #16161a;
-            --input-border: rgba(22, 22, 26, 0.12);
-            --input-focus: #6246ea;
-            --section-bg: rgba(22, 22, 26, 0.03);
-            --accent-color: #6246ea;
-            --accent-secondary: #1f9d5c;
-            --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-            --glow-color: rgba(98, 70, 234, 0.1);
+            --panel-border: rgba(26, 95, 180, 0.12);
+            --btn-bg: rgba(26, 95, 180, 0.08);
+            --btn-hover-bg: rgba(26, 95, 180, 0.15);
+            --btn-border: rgba(26, 95, 180, 0.15);
+            --btn-active-bg: linear-gradient(135deg, #1a5fb4 0%, #3584e4 100%);
+            --scrollbar-track: rgba(26, 95, 180, 0.03);
+            --scrollbar-thumb: rgba(26, 95, 180, 0.2);
+            --input-bg: rgba(26, 95, 180, 0.05);
+            --input-text: #1a1a2e;
+            --input-border: rgba(26, 95, 180, 0.15);
+            --input-focus: #3584e4;
+            --section-bg: rgba(26, 95, 180, 0.04);
+            --accent-color: #1a5fb4;
+            --accent-secondary: #3584e4;
+            --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.1);
+            --glow-color: rgba(26, 95, 180, 0.15);
         }
         html[data-bn-theme="darkblue"] {
-            --panel-bg: rgba(25, 32, 40, 0.95);
-            --panel-bg-solid: #192028;
+            --panel-bg: rgba(22, 33, 62, 0.95);
+            --panel-bg-solid: #16213e;
             --panel-text: #e8f1ff;
-            --panel-text-secondary: #7a8a9a;
-            --panel-header-bg: rgba(31, 40, 51, 0.98);
-            --panel-border: rgba(90, 155, 207, 0.12);
-            --btn-bg: rgba(90, 155, 207, 0.1);
-            --btn-hover-bg: rgba(90, 155, 207, 0.18);
-            --btn-border: rgba(90, 155, 207, 0.15);
-            --btn-active-bg: linear-gradient(135deg, #5a9bcf 0%, #4a8bbf 100%);
-            --scrollbar-track: rgba(90, 155, 207, 0.05);
-            --scrollbar-thumb: rgba(90, 155, 207, 0.2);
-            --handle-color: #5a9bcf;
-            --input-bg: rgba(90, 155, 207, 0.08);
+            --panel-text-secondary: #8899a6;
+            --panel-header-bg: rgba(26, 40, 70, 0.98);
+            --panel-border: rgba(98, 160, 234, 0.15);
+            --btn-bg: rgba(98, 160, 234, 0.12);
+            --btn-hover-bg: rgba(98, 160, 234, 0.22);
+            --btn-border: rgba(98, 160, 234, 0.18);
+            --btn-active-bg: linear-gradient(135deg, #3584e4 0%, #62a0ea 100%);
+            --scrollbar-track: rgba(98, 160, 234, 0.05);
+            --scrollbar-thumb: rgba(98, 160, 234, 0.25);
+            --handle-color: #62a0ea;
+            --input-bg: rgba(98, 160, 234, 0.1);
             --input-text: #e8f1ff;
-            --input-border: rgba(90, 155, 207, 0.15);
-            --input-focus: #5a9bcf;
-            --success-color: #41b883;
-            --danger-color: #e06c75;
-            --info-color: #61afef;
-            --warning-color: #e5c07b;
-            --section-bg: rgba(90, 155, 207, 0.05);
-            --accent-color: #5a9bcf;
-            --accent-secondary: #41b883;
-            --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-            --glow-color: rgba(90, 155, 207, 0.12);
+            --input-border: rgba(98, 160, 234, 0.18);
+            --input-focus: #62a0ea;
+            --success-color: #2ec27e;
+            --danger-color: #e01b24;
+            --info-color: #62a0ea;
+            --warning-color: #f5c211;
+            --section-bg: rgba(98, 160, 234, 0.06);
+            --accent-color: #3584e4;
+            --accent-secondary: #62a0ea;
+            --card-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+            --glow-color: rgba(98, 160, 234, 0.15);
         }
         
         /* Dark Blue Theme - Full Page Styles */
         html[data-bn-theme="darkblue"] body {
-            background-color: #192028 !important;
+            background-color: #16213e !important;
             color: #b8c5d6 !important;
         }
         html[data-bn-theme="darkblue"] .Header {
-            background-color: #192028 !important;
-            border-bottom-color: #2d3a4a !important;
+            background-color: #16213e !important;
+            border-bottom-color: #1a2744 !important;
         }
         html[data-bn-theme="darkblue"] .Header img {
             filter: brightness(0) invert(1);
@@ -391,25 +391,45 @@ function addGlobalStyle(css) {
         .bn-panel-header { 
             display: flex;
             align-items: center;
-            justify-content: space-between;
-            padding: 12px 14px;
+            justify-content: center;
+            position: relative;
+            padding: 14px 16px;
             cursor: move;
-            background: var(--panel-header-bg);
-            border-bottom: 1px solid var(--panel-border);
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.98) 0%, rgba(22, 33, 62, 0.98) 100%);
+            border-bottom: 2px solid;
+            border-image: linear-gradient(90deg, #1a5fb4, #3584e4, #62a0ea) 1;
+        }
+        .bn-logo-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .bn-logo {
+            width: 28px;
+            height: 28px;
+            filter: drop-shadow(0 2px 4px rgba(53, 132, 228, 0.3));
         }
         .bn-header-title { 
-            font-size: 14px;
+            font-size: 18px;
             font-weight: 700;
             letter-spacing: 0.5px;
-            background: linear-gradient(135deg, var(--accent-color) 0%, var(--accent-secondary) 100%);
+            background: linear-gradient(135deg, #3584e4 0%, #62a0ea 50%, #99c1f1 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             background-clip: text;
+            text-shadow: 0 2px 10px rgba(53, 132, 228, 0.2);
         }
         .bn-panel.left-side .bn-panel-header { border-top-right-radius: 16px; }
         .bn-panel.right-side .bn-panel-header { border-top-left-radius: 16px; }
         
-        .panel-header-controls { display: flex; align-items: center; gap: 4px; }
+        .panel-header-controls { 
+            display: flex; 
+            align-items: center; 
+            gap: 4px;
+            position: absolute;
+        }
+        .panel-header-controls.left { left: 12px; }
+        .panel-header-controls.right { right: 12px; }
         .panel-header-controls button, .panel-header-controls a { 
             background: var(--btn-bg);
             border: none;
@@ -452,13 +472,32 @@ function addGlobalStyle(css) {
         
         /* Panel Footer */
         .bn-panel-footer {
-            padding: 10px 14px;
-            background: var(--panel-header-bg);
-            border-top: 1px solid var(--panel-border);
-            text-align: center;
-            font-size: 10px;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, rgba(26, 26, 46, 0.95) 0%, rgba(22, 33, 62, 0.95) 100%);
+            border-top: 1px solid rgba(53, 132, 228, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11px;
             color: var(--panel-text-secondary);
-            letter-spacing: 0.3px;
+        }
+        .bn-footer-version {
+            color: rgba(153, 193, 241, 0.7);
+            font-weight: 500;
+        }
+        .bn-footer-link {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            color: rgba(153, 193, 241, 0.7);
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .bn-footer-link:hover {
+            color: #62a0ea;
+        }
+        .bn-footer-link svg {
+            opacity: 0.8;
         }
         .bn-panel.left-side .bn-panel-footer { border-bottom-right-radius: 16px; }
         .bn-panel.right-side .bn-panel-footer { border-bottom-left-radius: 16px; }
@@ -565,17 +604,15 @@ function addGlobalStyle(css) {
         
         /* Quick Actions Bar */
         .bn-quick-actions {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
             gap: 8px;
-            padding: 8px;
+            padding: 10px;
             background: var(--section-bg);
             border-radius: 12px;
             border: 1px solid var(--panel-border);
-            flex-wrap: wrap;
         }
         button.bn-quick-action-btn {
-            flex: 1;
-            min-width: 60px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -1292,7 +1329,7 @@ function addGlobalStyle(css) {
             font-size: 10px; font-weight: 600; text-transform: uppercase; opacity: 0.7;
             margin-bottom: 6px;
         }
-        .bn-live-stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+        .bn-live-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
         .bn-stat-box {
             background: var(--btn-bg); border-radius: 4px; padding: 6px;
             text-align: center;
@@ -1303,7 +1340,7 @@ function addGlobalStyle(css) {
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
         /* Navigation Quick Links */
-        .bn-nav-links { display: flex; flex-wrap: wrap; gap: 3px; }
+        .bn-nav-links { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
         a.bn-nav-link {
             flex: 1; min-width: calc(50% - 3px); padding: 4px 0; margin: 0; background: var(--btn-bg);
             border: 1px solid var(--btn-border); border-radius: 4px; text-align: center;
@@ -1531,7 +1568,7 @@ function addGlobalStyle(css) {
             [KEY_HIDDEN_DOMAINS]: ['nextdns.io'],
             [KEY_LOCK_STATE]: true,
             [KEY_THEME]: 'dark',
-            [KEY_WIDTH]: 180,
+            [KEY_WIDTH]: 650,
             [KEY_API_KEY]: null,
             [KEY_PROFILE_ID]: null,
             [KEY_DOMAIN_ACTIONS]: {},
@@ -1580,36 +1617,26 @@ function addGlobalStyle(css) {
 
     async function makeApiRequest(method, endpoint, body = null, apiKey = BetterNext_API_KEY, customUrl = null) {
         const url = customUrl || `https://api.nextdns.io${endpoint}`;
-        const headers = {
-            'X-Api-Key': apiKey
-        };
-        if (body) {
-            headers['Content-Type'] = 'application/json;charset=utf-8';
-        }
         
-        try {
-            const response = await fetch(url, {
+        return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+                type: 'API_REQUEST',
                 method: method,
-                headers: headers,
-                body: body ? JSON.stringify(body) : undefined
+                url: url,
+                apiKey: apiKey,
+                body: body
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                    return;
+                }
+                if (response.success) {
+                    resolve(response.data);
+                } else {
+                    reject(new Error(response.error));
+                }
             });
-            
-            if (response.ok) {
-                const text = await response.text();
-                return text ? JSON.parse(text) : {};
-            } else if (response.status === 404 && method === 'DELETE') {
-                return {};
-            } else {
-                let errorMsg = `${response.status}: ${response.statusText}`;
-                try {
-                    const errorData = await response.json();
-                    errorMsg = errorData?.errors?.[0]?.detail || errorMsg;
-                } catch (e) {}
-                throw new Error(errorMsg);
-            }
-        } catch (error) {
-            throw new Error(`Network request failed: ${error.message}`);
-        }
+        });
     }
 
     function getProfileID() {
@@ -1866,23 +1893,29 @@ function addGlobalStyle(css) {
 
     // --- HAGEZI INTEGRATION ---
     async function fetchHageziList(url, type) {
-        try {
-            const response = await fetch(url);
-            if (response.ok) {
-                const content = (await response.text()).trim();
-                let items;
-                if (type === 'tld') {
-                    items = content.match(/^\|\|(xn--)?\w+\^$/gm)?.map(e => e.slice(2, -1)) || [];
-                } else {
-                    items = content.split("\n").map(e => e.slice(4, -1));
+        return new Promise((resolve, reject) => {
+            chrome.runtime.sendMessage({
+                type: 'FETCH_TEXT',
+                url: url
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    reject(new Error(chrome.runtime.lastError.message));
+                    return;
                 }
-                return new Set(items);
-            } else {
-                throw new Error(`Failed to fetch list: ${response.statusText}`);
-            }
-        } catch (err) {
-            throw new Error('Network error fetching list.');
-        }
+                if (response.success) {
+                    const content = response.data.trim();
+                    let items;
+                    if (type === 'tld') {
+                        items = content.match(/^\|\|(xn--)?\w+\^$/gm)?.map(e => e.slice(2, -1)) || [];
+                    } else {
+                        items = content.split("\n").map(e => e.slice(4, -1));
+                    }
+                    resolve(new Set(items));
+                } else {
+                    reject(new Error(response.error));
+                }
+            });
+        });
     }
 
     async function manageHageziLists(action, listType, button) {
@@ -3570,7 +3603,7 @@ function addGlobalStyle(css) {
         
         panel = document.createElement('div');
         panel.id = 'bn-panel-main';
-        panel.className = 'bn-panel';
+        panel.className = 'bn-panel right-side'; // Default to right side immediately
         
         applyPanelWidth(panelWidth);
         panel.addEventListener('mouseenter', () => panel.classList.add('visible'));
@@ -3580,13 +3613,26 @@ function addGlobalStyle(css) {
         const header = document.createElement('div');
         header.className = 'bn-panel-header';
         leftHeaderControls = document.createElement('div');
-        leftHeaderControls.className = 'panel-header-controls';
+        leftHeaderControls.className = 'panel-header-controls left';
+        
+        // Logo and Title container
+        const logoTitleContainer = document.createElement('div');
+        logoTitleContainer.className = 'bn-logo-title';
+        
+        const logoImg = document.createElement('img');
+        logoImg.className = 'bn-logo';
+        logoImg.src = 'data:image/png;base64,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';
+        logoImg.alt = 'BetterNext';
+        
         const titleSpan = document.createElement('span');
         titleSpan.className = 'bn-header-title';
         titleSpan.textContent = 'BetterNext';
+        
+        logoTitleContainer.append(logoImg, titleSpan);
+        
         rightHeaderControls = document.createElement('div');
-        rightHeaderControls.className = 'panel-header-controls';
-        header.append(leftHeaderControls, titleSpan, rightHeaderControls);
+        rightHeaderControls.className = 'panel-header-controls right';
+        header.append(leftHeaderControls, logoTitleContainer, rightHeaderControls);
         panel.appendChild(header);
         
         // Header buttons
@@ -3799,7 +3845,15 @@ function addGlobalStyle(css) {
         // --- PANEL FOOTER ---
         const footer = document.createElement('div');
         footer.className = 'bn-panel-footer';
-        footer.textContent = 'BetterNext v1.0';
+        footer.innerHTML = `
+            <span class="bn-footer-version">v1.0.4</span>
+            <a href="https://github.com/SysAdminDoc/BetterNext" target="_blank" class="bn-footer-link" title="View on GitHub">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                </svg>
+                GitHub
+            </a>
+        `;
         panel.appendChild(footer);
 
         document.body.appendChild(panel);
@@ -3922,6 +3976,24 @@ function addGlobalStyle(css) {
         
         // Resize functionality (horizontal via blue edge)
         let isResizing = false;
+        
+        // Show resize cursor when hovering over the edge
+        panel.addEventListener('mousemove', function(e) {
+            if (isResizing) return;
+            const rect = panel.getBoundingClientRect();
+            const isRightSide = panel.classList.contains('right-side');
+            const edgeSize = 12;
+            
+            let onEdge = false;
+            if (isRightSide) {
+                onEdge = e.clientX <= rect.left + edgeSize;
+            } else {
+                onEdge = e.clientX >= rect.right - edgeSize;
+            }
+            
+            panel.style.cursor = onEdge ? 'ew-resize' : '';
+        });
+        
         panel.addEventListener('mousedown', async function(e) {
             const rect = panel.getBoundingClientRect();
             const isRightSide = panel.classList.contains('right-side');
@@ -3954,7 +4026,7 @@ function addGlobalStyle(css) {
                 } else {
                     newWidth = startWidth + (e.clientX - startX);
                 }
-                newWidth = Math.max(140, Math.min(500, newWidth));
+                newWidth = Math.max(200, Math.min(900, newWidth));
                 applyPanelWidth(newWidth);
             };
             
