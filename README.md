@@ -1,7 +1,6 @@
 # BetterNext - Enhanced NextDNS Control Panel
 
-
-<img width="128" height="128" alt="icon128" src="https://github.com/user-attachments/assets/b3c38f7d-17b2-404b-af2e-6ba1291ccad2" />
+![BetterNext Logo](icons/icon128.png)
 
 A powerful Chrome extension that supercharges your NextDNS experience with an enhanced control panel, quick actions, keyboard shortcuts, and a modern UI.
 
