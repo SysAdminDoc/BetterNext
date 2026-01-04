@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BetterNext - Enhanced NextDNS Control Panel",
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "Enhanced control panel for NextDNS with quick actions, keyboard shortcuts, bulk operations, and a modern UI.",
   "author": "Matt Parker",
   "homepage_url": "https://github.com/SysAdminDoc",
@@ -19,6 +19,9 @@
     "https://api.nextdns.io/*",
     "https://raw.githubusercontent.com/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://my.nextdns.io/*"],
