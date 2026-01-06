@@ -4,6 +4,8 @@
 
 A powerful Chrome extension that supercharges your NextDNS experience with an enhanced control panel, quick actions, keyboard shortcuts, and a modern UI.
 
+Chrome: https://chromewebstore.google.com/detail/betternext-enhanced-nextd/ekhchbdpkkjlcpelfmdbjapjcenabfgn
+
 ## Features
 
 ### 🎛️ Control Panel
