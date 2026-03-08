@@ -3734,7 +3734,7 @@ function addGlobalStyle(css) {
     function resolveItems(data) {
         if (!data) return [];
         if (Array.isArray(data)) return data.map(d => {
-            let name = d?.name || d?.domain || d?.id || d?.status || d?.protocol || d?.type || 'Unknown';
+            let name = d?.name || d?.domain || d?.company || d?.country || d?.id || d?.status || d?.protocol || d?.type || 'Unknown';
             if (d?.validated !== undefined && !d?.name && !d?.domain) name = d.validated ? 'Validated' : 'Not Validated';
             if (d?.encrypted !== undefined && !d?.name && !d?.domain) name = d.encrypted ? 'Encrypted' : 'Unencrypted';
             return { name: String(name), value: d?.queries || d?.count || 0 };
