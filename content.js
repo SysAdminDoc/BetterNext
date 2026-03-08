@@ -1,6 +1,6 @@
 /**
  * BetterNext - Enhanced NextDNS Control Panel
- * Chrome Extension v3.4.0
+ * Chrome Extension v3.5.0
  *
  * Enhanced control panel for NextDNS with condensed view, quick actions,
  * and consistent UI state across pages.
@@ -120,7 +120,6 @@ function addGlobalStyle(css) {
     let webhookUrl = '';
     let webhookDomains = [];
     let showCnameChain = true;
-    let scheduledLogTimer = null;
     // SLDs for proper root domain detection (unified list used everywhere)
     const SLDs = new Set(["co", "com", "org", "edu", "gov", "mil", "net", "ac", "or", "ne", "go", "ltd"]);
 
@@ -353,6 +352,22 @@ function addGlobalStyle(css) {
             background-color: rgba(40, 167, 69, 0.15) !important;
         }
 
+        /* Row action flash animations */
+        @keyframes bn-flash-deny {
+            0% { background-color: rgba(229, 49, 112, 0.6) !important; }
+            100% { background-color: rgba(113, 14, 14, 0.35) !important; }
+        }
+        @keyframes bn-flash-allow {
+            0% { background-color: rgba(44, 182, 125, 0.6) !important; }
+            100% { background-color: rgba(14, 113, 35, 0.35) !important; }
+        }
+        .Logs .log.list-group-item.bn-flash-deny {
+            animation: bn-flash-deny 0.6s ease-out forwards;
+        }
+        .Logs .log.list-group-item.bn-flash-allow {
+            animation: bn-flash-allow 0.6s ease-out forwards;
+        }
+
         /* ============================================
            MODERN PANEL DESIGN
            ============================================ */
@@ -361,8 +376,6 @@ function addGlobalStyle(css) {
             position: fixed;
             z-index: 9999;
             background: var(--panel-bg);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
             color: var(--panel-text);
             border-radius: 16px;
             box-shadow: var(--card-shadow), 0 0 0 1px var(--panel-border);
@@ -392,6 +405,32 @@ function addGlobalStyle(css) {
         }
         .bn-panel.visible { transform: translateX(0); }
         div.bn-panel.right-side.visible, div.bn-panel.left-side.visible { margin: 0; padding: 0; }
+
+        /* Resize grip indicator */
+        .bn-resize-grip {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 4px;
+            height: 32px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 3px;
+            cursor: ew-resize;
+            z-index: 10;
+            opacity: 0.3;
+            transition: opacity 0.2s ease;
+        }
+        .bn-resize-grip:hover { opacity: 0.8; }
+        .bn-resize-grip-dot {
+            width: 3px;
+            height: 3px;
+            border-radius: 50%;
+            background: var(--panel-text-secondary);
+        }
+        .bn-panel.right-side .bn-resize-grip { left: 4px; }
+        .bn-panel.left-side .bn-resize-grip { right: 4px; }
 
         /* Panel Header */
         .bn-panel-header {
@@ -567,7 +606,12 @@ function addGlobalStyle(css) {
             border-radius: 12px;
             border: 1px solid var(--panel-border);
         }
+        .bn-filter-group { display: flex; gap: 4px; }
+        .bn-filter-group .bn-panel-button { flex: 1; padding: 6px 4px; font-size: 10px; letter-spacing: -0.2px; }
+        .bn-filter-divider { height: 1px; background: var(--panel-border); margin: 2px 0; }
         .bn-section-content { display: flex; flex-direction: column; gap: 6px; }
+
+        .bn-section-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--panel-text-secondary); padding: 4px 4px 2px; }
 
         /* Quick Actions Bar */
         .bn-quick-actions {
@@ -762,22 +806,37 @@ function addGlobalStyle(css) {
             background: var(--btn-bg);
         }
 
-        /* Toast Notifications - Modern */
-        .bn-toast-countdown {
+        /* Toast Notifications - Stacking */
+        .bn-toast-stack {
             position: fixed;
             bottom: 24px;
             right: 24px;
-            padding: 14px 20px;
-            border-radius: 12px;
-            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
             z-index: 20000;
-            transform: translateY(100px);
+            display: flex;
+            flex-direction: column-reverse;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .bn-toast-item {
+            padding: 12px 18px;
+            border-radius: 10px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            transform: translateY(40px) scale(0.95);
             opacity: 0;
-            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
             font-size: 13px;
             font-weight: 500;
-            max-width: 380px;
-            backdrop-filter: blur(10px);
+            max-width: 350px;
+            pointer-events: auto;
+            color: #fff;
+        }
+        .bn-toast-item.visible {
+            transform: translateY(0) scale(1);
+            opacity: 1;
+        }
+        .bn-toast-item.exit {
+            transform: translateX(120%) scale(0.9);
+            opacity: 0;
         }
 
         /* Preload Container */
@@ -813,9 +872,7 @@ function addGlobalStyle(css) {
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.6);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
+            background: rgba(0, 0, 0, 0.85);
             z-index: 10000;
             justify-content: center;
             align-items: center;
@@ -895,6 +952,36 @@ function addGlobalStyle(css) {
             color: var(--panel-text);
             transform: rotate(90deg);
         }
+
+        .bn-settings-tabs {
+            display: flex;
+            gap: 0;
+            padding: 0 20px;
+            background: var(--panel-header-bg);
+            border-bottom: 1px solid var(--panel-border);
+            overflow-x: auto;
+            scrollbar-width: none;
+        }
+        .bn-settings-tabs::-webkit-scrollbar { display: none; }
+        .bn-settings-tab {
+            padding: 10px 14px;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--panel-text-secondary);
+            cursor: pointer;
+            border: none;
+            background: none;
+            border-bottom: 2px solid transparent;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+        .bn-settings-tab:hover { color: var(--panel-text); }
+        .bn-settings-tab.active {
+            color: var(--accent-color);
+            border-bottom-color: var(--accent-color);
+        }
+        .bn-settings-tab-panel { display: none; }
+        .bn-settings-tab-panel.active { display: block; }
 
         .bn-settings-modal-body {
             padding: 14px 20px 28px 20px;
@@ -1035,12 +1122,19 @@ function addGlobalStyle(css) {
         /* Inline Controls for Log Rows */
         .bn-reason-info { margin-left: 8px; font-size: 0.8em; font-style: italic; user-select: text; white-space: nowrap; opacity: 0.9; }
         .list-group-item.log .reason-icon { opacity: 1 !important; visibility: visible !important; display: inline-block !important; }
-        .bn-inline-controls { display: flex; align-items: center; gap: 4px; margin-left: auto; }
-        .bn-inline-controls button { cursor: pointer; background: transparent; border: none; font-size: 12px; padding: 0 3px; }
-        .bn-inline-controls span { margin-left: 2px; }
-        .bn-inline-controls .divider { border-left: 1px solid rgba(150, 150, 150, 0.3); margin: 0 6px; height: 16px; align-self: center; }
+        .bn-inline-controls { display: flex; align-items: center; gap: 2px; margin-left: auto; opacity: 0; transition: opacity 0.15s ease; pointer-events: none; }
+        .list-group-item.log:hover .bn-inline-controls { opacity: 1; pointer-events: auto; }
+        .bn-inline-controls button { cursor: pointer; background: transparent; border: none; padding: 3px 4px; border-radius: 4px; display: flex; align-items: center; justify-content: center; transition: all 0.15s ease; color: var(--panel-text-secondary, #94a1b2); }
+        .bn-inline-controls button:hover { background: var(--btn-hover-bg, rgba(148,161,178,0.2)); color: var(--panel-text, #fff); }
+        .bn-inline-controls button.bn-ic-deny { color: var(--danger-color, #e53170); }
+        .bn-inline-controls button.bn-ic-deny:hover { background: rgba(229,49,112,0.15); }
+        .bn-inline-controls button.bn-ic-allow { color: var(--success-color, #2cb67d); }
+        .bn-inline-controls button.bn-ic-allow:hover { background: rgba(44,182,125,0.15); }
+        .bn-inline-controls button svg { width: 14px; height: 14px; fill: currentColor; pointer-events: none; }
+        .bn-inline-controls .divider { border-left: 1px solid rgba(150, 150, 150, 0.2); margin: 0 3px; height: 14px; align-self: center; }
         .list-group-item .notranslate strong { font-weight: bold !important; color: var(--panel-text) !important; }
         .list-group-item .notranslate .subdomain { opacity: 0.5; }
+        .log .text-end .notranslate[style*="background: rgb(238, 238, 238)"] { background: transparent !important; }
 
         /* List Page Features CSS */
         .bn-options-container {
@@ -1081,14 +1175,27 @@ function addGlobalStyle(css) {
 
         /* Log Counters */
         .bn-log-counters {
-            display: flex; gap: 15px; padding: 8px 15px; background: var(--section-bg);
-            border-radius: 8px; margin-bottom: 10px; font-size: 12px; align-items: center;
+            display: flex; flex-direction: column; gap: 6px; padding: 10px 15px;
+            background: var(--section-bg); border-radius: 10px; margin-bottom: 10px;
+            border: 1px solid var(--panel-border);
         }
-        .bn-log-counters span { color: var(--panel-text); }
-        .bn-log-counters .counter-value { font-weight: bold; margin-left: 4px; }
+        .bn-log-counters-row {
+            display: flex; gap: 15px; font-size: 12px; align-items: center;
+        }
+        .bn-log-counters-row span { color: var(--panel-text); }
+        .bn-log-counters .counter-value { font-weight: bold; margin-left: 4px; font-family: 'SF Mono', 'Fira Code', monospace; }
         .bn-log-counters .visible-count { color: var(--success-color); }
         .bn-log-counters .filtered-count { color: var(--warning-color); }
         .bn-log-counters .total-count { color: var(--info-color); }
+        .bn-log-bar {
+            height: 4px; border-radius: 2px; display: flex; overflow: hidden;
+            background: var(--btn-bg);
+        }
+        .bn-log-bar-seg {
+            height: 100%; transition: width 0.3s ease;
+        }
+        .bn-log-bar-seg.visible { background: var(--success-color); }
+        .bn-log-bar-seg.filtered { background: var(--warning-color); }
 
         /* Collapsible Lists */
         .bn-collapse-container { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
@@ -1108,38 +1215,60 @@ function addGlobalStyle(css) {
         .list-group-item.bn-right-align img { order: 2; margin-left: 6px; margin-right: 0; }
 
         /* Onboarding Modal */
-        #bn-onboarding-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 10002; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s ease-out; }
+        #bn-onboarding-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10002; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.3s ease-out; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        #bn-onboarding-modal { background: #1e1e1e; color: #fff; padding: 30px; border-radius: 12px; width: 90%; max-width: 480px; box-shadow: 0 15px 40px rgba(0,0,0,0.6); text-align: center; border: 1px solid #333; }
-        #bn-onboarding-modal h3 { font-size: 22px; margin-top: 0; margin-bottom: 12px; }
-        #bn-onboarding-modal p { color: #aaa; font-size: 14px; margin-bottom: 20px; }
+        #bn-onboarding-modal {
+            background: var(--panel-bg-solid, #16161a); color: var(--panel-text, #fffffe);
+            padding: 30px; border-radius: 16px; width: 90%; max-width: 480px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.5), 0 0 0 1px var(--panel-border, rgba(148,161,178,0.1));
+            text-align: center;
+        }
+        #bn-onboarding-modal h3 {
+            font-size: 22px; margin-top: 0; margin-bottom: 12px; font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-color, #7f5af0) 0%, var(--accent-secondary, #2cb67d) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        #bn-onboarding-modal p { color: var(--panel-text-secondary, #94a1b2); font-size: 14px; margin-bottom: 20px; }
         #bn-onboarding-modal .api-input-wrapper { display: flex; gap: 8px; margin-top: 15px; }
-        #bn-onboarding-modal input { flex-grow: 1; padding: 10px; border-radius: 6px; border: 1px solid #444; background: #2a2a2a; color: #fff; font-size: 14px; }
-        .bn-flashy-button { background: linear-gradient(45deg, #a855f7, #ec4899, #22d3ee, #f59e0b); background-size: 300% 300%; animation: gradient-shift 4s ease infinite; border: none; color: white !important; width: 100%; padding: 12px; margin-top: 15px; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
-        .bn-flashy-button:hover { transform: scale(1.02); }
-        @keyframes gradient-shift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
+        #bn-onboarding-modal input {
+            flex-grow: 1; padding: 10px 14px; border-radius: 10px;
+            border: 1px solid var(--input-border, rgba(148,161,178,0.15));
+            background: var(--input-bg, rgba(148,161,178,0.08));
+            color: var(--input-text, #fffffe); font-size: 14px;
+            transition: all 0.2s ease;
+        }
+        #bn-onboarding-modal input:focus { outline: none; border-color: var(--input-focus, #7f5af0); box-shadow: 0 0 0 3px var(--glow-color, rgba(127,90,240,0.15)); }
+        .bn-flashy-button {
+            background: linear-gradient(135deg, var(--accent-color, #7f5af0), var(--accent-secondary, #2cb67d));
+            border: none; color: white !important; width: 100%; padding: 12px; margin-top: 15px;
+            border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer;
+            transition: all 0.2s ease; box-shadow: 0 4px 16px rgba(127,90,240,0.3);
+        }
+        .bn-flashy-button:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(127,90,240,0.4); }
 
         /* Login Spotlight */
-        .bn-spotlight-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(20, 20, 20, 0.8); backdrop-filter: blur(5px); z-index: 10000; }
-        .bn-login-focus { position: relative !important; z-index: 10001 !important; background: var(--panel-bg, #1e1e1e); padding: 20px; border-radius: 12px; }
-        .bn-affiliate-pitch { position: fixed; z-index: 10001; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; text-align: center; max-width: 480px; font-size: 15px; line-height: 1.6; }
+        .bn-spotlight-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.85); z-index: 10000; }
+        .bn-login-focus { position: relative !important; z-index: 10001 !important; background: var(--panel-bg-solid, #16161a); padding: 20px; border-radius: 12px; }
+        .bn-affiliate-pitch { position: fixed; z-index: 10001; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--panel-text, #fff); text-align: center; max-width: 480px; font-size: 15px; line-height: 1.6; }
         .bn-affiliate-pitch p { margin-bottom: 1em; }
-        .bn-affiliate-pitch a { color: var(--info-color); font-weight: 600; }
-        .bn-spotlight-close { position: fixed; top: 20px; right: 20px; z-index: 10002; font-size: 28px; color: white; cursor: pointer; opacity: 0.7; }
+        .bn-affiliate-pitch a { color: var(--accent-color, #7f5af0); font-weight: 600; }
+        .bn-spotlight-close { position: fixed; top: 20px; right: 20px; z-index: 10002; font-size: 28px; color: var(--panel-text, white); cursor: pointer; opacity: 0.7; }
         .bn-spotlight-close:hover { opacity: 1; }
 
         /* API Helper Bar */
         .bn-api-helper {
-            position: sticky; top: 0; z-index: 10001; background: #1e1e1e; color: white;
-            padding: 12px 20px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.5); border-bottom: 1px solid #333;
+            position: sticky; top: 0; z-index: 10001;
+            background: var(--panel-bg-solid, #16161a); color: var(--panel-text, white);
+            padding: 12px 20px; text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5); border-bottom: 1px solid var(--panel-border, rgba(148,161,178,0.1));
             display: flex; align-items: center; justify-content: center; gap: 15px;
         }
         .bn-api-helper p { margin: 0; font-size: 14px; font-weight: 600; }
-        .bn-api-helper button { padding: 8px 16px; font-size: 13px; font-weight: 600; border-radius: 5px; border: none; cursor: pointer; transition: all 0.2s ease; }
-        .bn-api-helper .save-key-btn { background-color: var(--info-color); color: white; }
-        .bn-api-helper .save-key-btn:hover { background-color: #19b9d1; }
-        .bn-api-helper .generate-key-btn { background: linear-gradient(45deg, #a855f7, #ec4899); color: white; }
-        .bn-api-helper button:disabled { background-color: var(--success-color) !important; cursor: not-allowed; animation: none; }
+        .bn-api-helper button { padding: 8px 16px; font-size: 13px; font-weight: 600; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s ease; }
+        .bn-api-helper .save-key-btn { background: var(--accent-color, #7f5af0); color: white; }
+        .bn-api-helper .save-key-btn:hover { box-shadow: 0 4px 12px rgba(127,90,240,0.3); }
+        .bn-api-helper .generate-key-btn { background: linear-gradient(135deg, var(--accent-color, #7f5af0), var(--accent-secondary, #2cb67d)); color: white; }
+        .bn-api-helper button:disabled { background: var(--success-color, #2cb67d) !important; cursor: not-allowed; }
 
         /* Auto Refresh Animation */
         .bn-panel-button.auto-refresh-active {
@@ -1153,10 +1282,42 @@ function addGlobalStyle(css) {
         /* Compact Mode */
         html.bn-compact-mode .bn-panel-button { padding: 4px 6px; font-size: 10px; }
         html.bn-compact-mode .bn-panel-content { gap: 4px; }
-        html.bn-compact-mode .bn-inline-controls { gap: 3px; }
-        html.bn-compact-mode .bn-inline-controls button { font-size: 10px; }
+        html.bn-compact-mode .bn-inline-controls { gap: 1px; }
+        html.bn-compact-mode .bn-inline-controls button { padding: 2px 3px; }
+        html.bn-compact-mode .bn-inline-controls button svg { width: 12px; height: 12px; }
         html.bn-compact-mode .log .text-end .fa-lock { display: none; }
-        html.bn-compact-mode .log .text-end > .notranslate { display: none; }
+
+        /* Compact Mode - Collapsible Sections */
+        html.bn-compact-mode .bn-section { padding: 0; gap: 0; overflow: hidden; }
+        html.bn-compact-mode .bn-section-header {
+            display: flex; align-items: center; gap: 6px; padding: 6px 8px;
+            cursor: pointer; user-select: none; transition: background 0.15s ease;
+        }
+        html.bn-compact-mode .bn-section-header:hover { background: var(--btn-hover-bg); }
+        html.bn-compact-mode .bn-section-header svg {
+            width: 14px; height: 14px; fill: var(--panel-text-secondary); flex-shrink: 0;
+        }
+        html.bn-compact-mode .bn-section-header span {
+            font-size: 9px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 0.5px; color: var(--panel-text-secondary);
+        }
+        html.bn-compact-mode .bn-section-header .bn-chevron {
+            margin-left: auto; width: 10px; height: 10px;
+            fill: var(--panel-text-secondary); opacity: 0.5;
+            transition: transform 0.2s ease;
+        }
+        html.bn-compact-mode .bn-section.bn-section-collapsed .bn-chevron {
+            transform: rotate(-90deg);
+        }
+        html.bn-compact-mode .bn-section-body {
+            display: flex; flex-direction: column; gap: 6px; padding: 4px 8px 8px;
+            transition: max-height 0.2s ease, opacity 0.15s ease;
+            max-height: 500px; opacity: 1;
+        }
+        html.bn-compact-mode .bn-section.bn-section-collapsed .bn-section-body {
+            max-height: 0; opacity: 0; padding-top: 0; padding-bottom: 0; overflow: hidden;
+        }
+        html.bn-compact-mode .bn-section .bn-section-label { display: none; }
 
         /* Export Button */
         #export-hosts-btn { display: inline-flex; align-items: center; justify-content: center; transition: all 0.2s ease; }
@@ -1180,16 +1341,9 @@ function addGlobalStyle(css) {
         .stream-button.auto-refresh-active svg {
             animation: spin 1s linear infinite !important;
         }
-        .stream-button.streaming,
-        .stream-button.auto-refresh-active {
-            background: linear-gradient(270deg, #17a2b8, #28a745, #17a2b8);
-            background-size: 200% 200%;
-            animation: gradient-shine 2s linear infinite;
-            border-radius: 50% !important;
-        }
         .stream-button.streaming svg,
         .stream-button.auto-refresh-active svg {
-            fill: white !important;
+            fill: var(--accent-color, #28a745) !important;
         }
 
         /* Live Stats Widget */
@@ -1233,7 +1387,7 @@ function addGlobalStyle(css) {
         /* Config Import/Export & Profile Clone Modal */
         .bn-profile-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.7); backdrop-filter: blur(5px);
+            background: rgba(0,0,0,0.85);
             z-index: 10003; display: flex; align-items: center; justify-content: center;
         }
         .bn-profile-modal {
@@ -1438,6 +1592,14 @@ function addGlobalStyle(css) {
         .bn-data-table td.mono { font-family: monospace; }
         .bn-data-table td.right, .bn-data-table th.right { text-align: right; }
 
+        /* Trend Chart */
+        .bn-trend-chart { position: relative; }
+        .bn-trend-svg { width: 100%; height: 160px; display: block; }
+        .bn-trend-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--panel-text-secondary); margin-top: 4px; opacity: 0.7; }
+        .bn-trend-legend { display: flex; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
+        .bn-trend-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--panel-text); }
+        .bn-trend-legend-dot { width: 10px; height: 3px; border-radius: 2px; }
+
         /* Export Bar */
         .bn-analytics-export-bar {
             display: flex; gap: 8px; align-items: center; justify-content: flex-end;
@@ -1603,6 +1765,7 @@ function addGlobalStyle(css) {
             margin: 0;
         }
         div.text-end { display: none; }
+        div.log div.text-end { display: block; }
         div.px-3.bg-2.list-group-item {
             border-top-width: 1px;
             border-style: solid;
@@ -1660,33 +1823,41 @@ function addGlobalStyle(css) {
         return hex;
     };
 
+    const MAX_TOASTS = 3;
+    function getToastStack() {
+        let stack = document.querySelector('.bn-toast-stack');
+        if (!stack) {
+            stack = document.createElement('div');
+            stack.className = 'bn-toast-stack';
+            document.body.appendChild(stack);
+        }
+        return stack;
+    }
+
     function showToast(msg, isError = false, duration = 4000) {
-        let existingToast = document.querySelector('.bn-toast-countdown');
-        if (existingToast) existingToast.remove();
+        const stack = getToastStack();
+        const toasts = stack.querySelectorAll('.bn-toast-item');
+
+        // Remove oldest if at max
+        if (toasts.length >= MAX_TOASTS) {
+            const oldest = toasts[0];
+            oldest.classList.add('exit');
+            oldest.classList.remove('visible');
+            setTimeout(() => oldest.remove(), 350);
+        }
 
         const n = document.createElement('div');
-        n.className = 'bn-toast-countdown';
+        n.className = 'bn-toast-item';
         n.textContent = msg;
-        Object.assign(n.style, {
-            position: 'fixed', bottom: '20px', right: '20px',
-            background: isError ? 'var(--danger-color)' : 'var(--success-color)',
-            color: '#fff', padding: '12px 18px', borderRadius: '6px',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)', zIndex: 20000,
-            transform: 'translateY(100px)', opacity: '0',
-            transition: 'transform 0.4s ease, opacity 0.4s ease',
-            fontSize: '13px', maxWidth: '350px'
-        });
-        document.body.appendChild(n);
+        n.style.background = isError ? 'var(--danger-color)' : 'var(--success-color)';
+        stack.appendChild(n);
+
+        requestAnimationFrame(() => requestAnimationFrame(() => n.classList.add('visible')));
+
         setTimeout(() => {
-            n.style.transform = 'translateY(0)';
-            n.style.opacity = '1';
-        }, 10);
-        setTimeout(() => {
-            n.style.transform = 'translateY(100px)';
-            n.style.opacity = '0';
-            const cleanup = () => { if (n.parentNode) n.remove(); };
-            n.addEventListener('transitionend', cleanup, { once: true });
-            setTimeout(cleanup, 500); // Fallback if transitionend doesn't fire
+            n.classList.add('exit');
+            n.classList.remove('visible');
+            setTimeout(() => n.remove(), 350);
         }, duration);
         return n;
     }
@@ -1880,6 +2051,59 @@ function addGlobalStyle(css) {
         }
 
         isUltraCondensed = enabled;
+        document.documentElement.classList.toggle('bn-compact-mode', enabled);
+        if (enabled) wrapSectionsForCompact();
+        else unwrapSectionsForCompact();
+    }
+
+    // --- Compact Mode Section Wrapping ---
+    const SECTION_ICONS = {
+        'bn-section-logActions': { label: 'Log Actions', icon: 'M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm-1 7V3.5L18.5 9H13z' },
+        'bn-section-filters': { label: 'Filters', icon: 'M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z' },
+        'bn-section-autoRefresh': { label: 'Auto Refresh', icon: 'M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z' },
+        'bn-section-preload': { label: 'Load Logs', icon: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z' },
+        'bn-section-bulkDelete': { label: 'Bulk Delete', icon: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z' }
+    };
+    const CHEVRON_PATH = 'M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6-6-6z';
+
+    function wrapSectionsForCompact() {
+        Object.entries(SECTION_ICONS).forEach(([id, { label, icon }]) => {
+            const section = document.getElementById(id);
+            if (!section || section.querySelector('.bn-section-header')) return;
+
+            const header = document.createElement('div');
+            header.className = 'bn-section-header';
+            header.innerHTML = `<svg viewBox="0 0 24 24"><path d="${icon}"/></svg><span>${label}</span><svg class="bn-chevron" viewBox="0 0 24 24"><path d="${CHEVRON_PATH}"/></svg>`;
+            header.addEventListener('click', () => {
+                section.classList.toggle('bn-section-collapsed');
+            });
+
+            const body = document.createElement('div');
+            body.className = 'bn-section-body';
+
+            const children = [...section.children].filter(c => !c.classList.contains('bn-section-label'));
+            children.forEach(c => body.appendChild(c));
+
+            section.prepend(header);
+            section.appendChild(body);
+        });
+    }
+
+    function unwrapSectionsForCompact() {
+        Object.keys(SECTION_ICONS).forEach(id => {
+            const section = document.getElementById(id);
+            if (!section) return;
+
+            const body = section.querySelector('.bn-section-body');
+            const header = section.querySelector('.bn-section-header');
+            if (body) {
+                const children = [...body.children];
+                children.forEach(c => section.appendChild(c));
+                body.remove();
+            }
+            if (header) header.remove();
+            section.classList.remove('bn-section-collapsed');
+        });
     }
 
     // --- Escape key to close overlays ---
@@ -2057,7 +2281,6 @@ function addGlobalStyle(css) {
             };
         } else {
             document.getElementById('bn-get-api-key-btn').onclick = () => {
-                sessionStorage.setItem('ndnsRedirectUrl', window.location.href);
                 window.location.href = 'https://my.nextdns.io/account';
             };
         }
@@ -2174,7 +2397,7 @@ function addGlobalStyle(css) {
     async function finalizeApiKeySetup() {
         try {
             const data = await storage.get(['bn_api_key_to_transfer']);
-            const apiKey = data.ndns_api_key_to_transfer;
+            const apiKey = data.bn_api_key_to_transfer;
 
             await storage.remove(['bn_api_key_to_transfer', 'bn_return_from_account']);
 
@@ -2369,13 +2592,29 @@ function addGlobalStyle(css) {
         const apiUrl = `/profiles/${pid}/${endpoint}`;
         try {
             await makeApiRequest('POST', apiUrl, { "id": domainToSend, "active": true }, BetterNext_API_KEY);
-            hiddenDomains.add(domain);
-            await storage.set({ [KEY_HIDDEN_DOMAINS]: [...hiddenDomains] });
             const level = domain === extractRootDomain(domain) ? 'root' : 'sub';
             await updateDomainAction(domain, mode, level);
-            showToast(`${domain} added to ${endpoint} and hidden!`);
-            invalidateLogCache();
-            cleanLogs();
+
+            // Flash the matching rows before reprocessing
+            const flashClass = mode === 'deny' ? 'bn-flash-deny' : 'bn-flash-allow';
+            document.querySelectorAll('div.list-group-item.log').forEach(row => {
+                if (row.dataset.ndnsDomain === domain || row.dataset.ndnsDomain?.endsWith('.' + domain)) {
+                    row.classList.add(flashClass);
+                }
+            });
+
+            if (mode === 'deny') {
+                hiddenDomains.add(domain);
+                await storage.set({ [KEY_HIDDEN_DOMAINS]: [...hiddenDomains] });
+                showToast(`${domain} added to ${endpoint} and hidden!`);
+            } else {
+                showToast(`${domain} added to ${endpoint}!`);
+            }
+            // Delay reprocessing slightly so flash animation is visible
+            setTimeout(() => {
+                invalidateLogCache();
+                cleanLogs();
+            }, mode === 'deny' ? 400 : 0);
         } catch (error) {
             showToast(`API Error: ${error.message || 'Unknown'}`, true);
         }
@@ -2541,9 +2780,20 @@ function addGlobalStyle(css) {
         const wrapper = document.createElement('div');
         wrapper.className = 'bn-inline-controls';
 
-        const createBtn = (icon, title, action, className = '') => {
+        // SVG path data for inline control icons
+        const IC = {
+            block: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z',
+            check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+            eyeOff: 'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75C21.27 7.11 17 4.5 12 4.5c-1.6 0-3.14.35-4.6.98l2.1 2.1C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27z',
+            copy: 'M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z',
+            search: 'M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
+            whois: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z'
+        };
+        const icSvg = (d) => `<svg viewBox="0 0 24 24"><path d="${d}"/></svg>`;
+
+        const createBtn = (svgPath, title, action, className = '') => {
             const b = document.createElement('button');
-            b.innerHTML = icon;
+            b.innerHTML = icSvg(svgPath);
             b.title = title;
             b.className = className;
             b.onclick = action;
@@ -2566,18 +2816,18 @@ function addGlobalStyle(css) {
         const rootDomain = extractRootDomain(domain);
 
         const buttons = [
-            createBtn('🚫', 'Block Full Domain', () => sendDomainViaApi(domain, 'deny')),
-            createBtn('⛔', 'Block Root Domain', () => sendDomainViaApi(rootDomain, 'deny')),
+            createBtn(IC.block, 'Block Full Domain', () => sendDomainViaApi(domain, 'deny'), 'bn-ic-deny'),
+            createBtn(IC.block, 'Block Root Domain', () => sendDomainViaApi(rootDomain, 'deny'), 'bn-ic-deny'),
             createDivider(),
-            createBtn('✅', 'Allow Full Domain', () => sendDomainViaApi(domain, 'allow')),
-            createBtn('🟢', 'Allow Root Domain', () => sendDomainViaApi(rootDomain, 'allow')),
+            createBtn(IC.check, 'Allow Full Domain', () => sendDomainViaApi(domain, 'allow'), 'bn-ic-allow'),
+            createBtn(IC.check, 'Allow Root Domain', () => sendDomainViaApi(rootDomain, 'allow'), 'bn-ic-allow'),
             createDivider(),
-            createBtn('👁️', 'Hide Full', () => onHide(domain)),
-            createBtn('🙈', 'Hide Root', () => onHide(rootDomain)),
+            createBtn(IC.eyeOff, 'Hide Full', () => onHide(domain)),
+            createBtn(IC.eyeOff, 'Hide Root', () => onHide(rootDomain)),
             createDivider(),
-            createBtn('📋', 'Copy Domain', () => copyToClipboard(domain)),
-            createBtn('🔍', 'Google', () => window.open(`https://www.google.com/search?q=${encodeURIComponent(domain)}`, '_blank')),
-            createBtn('🕵️', 'Who.is', () => window.open(`https://www.who.is/whois/${encodeURIComponent(rootDomain)}`, '_blank'))
+            createBtn(IC.copy, 'Copy Domain', () => copyToClipboard(domain)),
+            createBtn(IC.search, 'Google', () => window.open(`https://www.google.com/search?q=${encodeURIComponent(domain)}`, '_blank')),
+            createBtn(IC.whois, 'Who.is', () => window.open(`https://www.who.is/whois/${encodeURIComponent(rootDomain)}`, '_blank'))
         ];
 
         buttons.forEach(btn => wrapper.appendChild(btn));
@@ -2588,7 +2838,7 @@ function addGlobalStyle(css) {
     let isCleaningLogs = false; // Guard against re-entry
 
     function invalidateLogCache() {
-        document.querySelectorAll('div.list-group-item.log[data-bn-processed]').forEach(row => {
+        document.querySelectorAll('div.list-group-item.log[data-ndns-processed]').forEach(row => {
             delete row.dataset.ndnsProcessed;
         });
     }
@@ -2621,7 +2871,6 @@ function addGlobalStyle(css) {
                     } else {
                         // Clear any previously-applied NDNS border so removed actions don't linger
                         if (row.style.borderLeft) row.style.borderLeft = '';
-                        row.classList.remove('bn-row-blocked', 'bn-row-allowed');
                     }
                     row.dataset.ndnsHistAction = historicalAction ? historicalAction.type : '';
                 }
@@ -2713,7 +2962,9 @@ function addGlobalStyle(css) {
                                            row.querySelector('.flex-grow-1.d-flex.align-items-center.text-break');
                     targetContainer?.appendChild(infoElement);
                 }
+            }
 
+            if (!alreadyProcessed) {
                 // Determine and cache row status for coloring
                 // Use .reason-icon (NextDNS native) and historicalAction (NDNS) as authoritative sources
                 const reasonIcon = row.querySelector('.reason-icon');
@@ -2815,7 +3066,7 @@ function addGlobalStyle(css) {
         refreshSvg.dataset.ndnsReplaced = 'true';
 
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-        path.setAttribute('d', 'M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z');
+        path.setAttribute('d', 'M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z');
 
         refreshSvg.appendChild(path);
 
@@ -2830,7 +3081,64 @@ function addGlobalStyle(css) {
         }
     }
 
+    let logStreamPort = null;
+
     function startAutoRefresh() {
+        if (logStreamPort) return;
+
+        const pid = getCurrentProfileId();
+        if (!pid || !BetterNext_API_KEY) {
+            // Fallback to polling if no API key/profile
+            startAutoRefreshPolling();
+            return;
+        }
+
+        try {
+            logStreamPort = chrome.runtime.connect({ name: 'bn-log-stream' });
+
+            logStreamPort.onMessage.addListener((msg) => {
+                if (msg.type === 'connected') {
+                    console.log('[BetterNext] SSE log stream connected');
+                }
+                if (msg.type === 'log') {
+                    // Trigger a native refresh to pick up the new entry
+                    if (document.visibilityState === 'visible') {
+                        document.querySelector('.stream-button svg')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+                    }
+                }
+                if (msg.type === 'error') {
+                    console.warn('[BetterNext] SSE stream error:', msg.error, '- falling back to polling');
+                    cleanupStreamPort();
+                    startAutoRefreshPolling();
+                }
+                if (msg.type === 'ended') {
+                    console.log('[BetterNext] SSE stream ended, reconnecting...');
+                    cleanupStreamPort();
+                    setTimeout(startAutoRefresh, 2000);
+                }
+            });
+
+            logStreamPort.onDisconnect.addListener(() => {
+                logStreamPort = null;
+            });
+
+            logStreamPort.postMessage({ action: 'start', profileId: pid, apiKey: BetterNext_API_KEY });
+        } catch (err) {
+            console.warn('[BetterNext] SSE connect failed, falling back to polling:', err);
+            cleanupStreamPort();
+            startAutoRefreshPolling();
+        }
+    }
+
+    function cleanupStreamPort() {
+        if (logStreamPort) {
+            try { logStreamPort.postMessage({ action: 'stop' }); } catch {}
+            try { logStreamPort.disconnect(); } catch {}
+            logStreamPort = null;
+        }
+    }
+
+    function startAutoRefreshPolling() {
         if (autoRefreshInterval) return;
         autoRefreshInterval = setInterval(() => {
             if (document.visibilityState === 'visible') {
@@ -2840,6 +3148,7 @@ function addGlobalStyle(css) {
     }
 
     function stopAutoRefresh() {
+        cleanupStreamPort();
         clearInterval(autoRefreshInterval);
         autoRefreshInterval = null;
     }
@@ -2908,6 +3217,11 @@ function addGlobalStyle(css) {
             if (key === 'showOnlyWhitelisted') {
                 deselectShowBlockedOnly();
             }
+
+            // Hide Blocked conflicts with Blocked Only — disable it
+            if (key === 'hideBlocked') {
+                deselectShowBlockedOnly();
+            }
         }
 
         if (exclusiveKeys.includes(key)) {
@@ -2963,11 +3277,10 @@ function addGlobalStyle(css) {
                 // For blocked-queries-only, manage CSS hiding and settings box
                 if (checkboxId === 'blocked-queries-only') {
                     applyBlockedOnlyCSS(isNowChecked);
-                    // If we just checked it, deselect Show Allowed Only
                     if (isNowChecked) {
                         deselectShowAllowedOnly();
+                        deselectHideBlocked();
                     }
-                    // If we just unchecked it, close the settings box
                     if (!isNowChecked) {
                         setTimeout(() => {
                             const closeBtn = document.querySelector('div.settings-button.active');
@@ -3000,9 +3313,9 @@ function addGlobalStyle(css) {
                         // For blocked-queries-only, apply CSS hiding instead of closing settings
                         if (checkboxId === 'blocked-queries-only') {
                             applyBlockedOnlyCSS(isChecked);
-                            // Deselect Show Allowed Only when Show Blocked Only is enabled
                             if (isChecked) {
                                 deselectShowAllowedOnly();
+                                deselectHideBlocked();
                             }
                             // Don't close settings - it needs to stay open for the filter to work
                         } else {
@@ -3044,6 +3357,16 @@ function addGlobalStyle(css) {
                 const closeBtn = document.querySelector('div.settings-button.active');
                 if (closeBtn) closeBtn.click();
             }, 100);
+        }
+    }
+
+    async function deselectHideBlocked() {
+        if (filters.hideBlocked) {
+            filters.hideBlocked = false;
+            await storage.set({ [KEY_FILTER_STATE]: filters });
+            updateButtonStates();
+            updatePanelBorderColor();
+            cleanLogs();
         }
     }
 
@@ -3659,7 +3982,7 @@ function addGlobalStyle(css) {
 
             console.log('[BetterNext] Fetching analytics for profile:', pid);
 
-            const [domains, blockedDomains, statusData, dnssecData, encryptionData, protocolsData, queryTypesData, ipVersionsData, destinationsData, devicesData] = await Promise.all([
+            const [domains, blockedDomains, statusData, dnssecData, encryptionData, protocolsData, queryTypesData, ipVersionsData, devicesData, countriesData, gafamData, statusSeries] = await Promise.all([
                 safeApi('domains?limit=50'),
                 safeApi('domains?status=blocked&limit=30'),
                 safeApi('status'),
@@ -3668,8 +3991,10 @@ function addGlobalStyle(css) {
                 safeApi('protocols'),
                 safeApi('queryTypes'),
                 safeApi('ipVersions'),
-                safeApi('destinations'),
-                safeApi('devices')
+                safeApi('devices'),
+                safeApi('destinations?type=countries&limit=20'),
+                safeApi('destinations?type=gafam'),
+                safeApi('status;series?from=-24h&interval=1h')
             ]);
 
             console.log('[BetterNext] Analytics data loaded successfully');
@@ -3686,11 +4011,17 @@ function addGlobalStyle(css) {
                 domains: excludeDomain(norm(domains)), blocked: excludeDomain(norm(blockedDomains)), status: norm(statusData),
                 dnssec: norm(dnssecData), encryption: norm(encryptionData), protocols: norm(protocolsData),
                 queryTypes: norm(queryTypesData), ipVersions: norm(ipVersionsData),
-                destinations: norm(destinationsData), devices: norm(devicesData)
+                devices: norm(devicesData), countries: norm(countriesData), gafam: norm(gafamData),
+                statusSeries: statusSeries
             };
 
             loading.remove();
             buildDashboardContent(container, analyticsCache);
+
+            // Update extension badge with blocked count
+            const blockedEntry = analyticsCache.status.find(d => /block/i.test(d.status || d.name || ''));
+            const blockedCount = blockedEntry?.queries || blockedEntry?.count || blockedEntry?.value || 0;
+            try { chrome.runtime.sendMessage({ type: 'UPDATE_BADGE', blockedCount }); } catch {}
 
         } catch (e) {
             loading.innerHTML = `<span style="color:var(--danger-color);">Failed to load analytics: ${escapeHtml(String(e?.message || e || 'Unknown error'))}</span>`;
@@ -3750,12 +4081,33 @@ function addGlobalStyle(css) {
         row2.appendChild(buildBarWidget('Top Blocked Domains', data.blocked, 30, 'red'));
         container.appendChild(row2);
 
+        // --- Trend Chart (24h query activity) ---
+        if (data.statusSeries) {
+            const trendWidget = buildTrendWidget('Query Activity (24h)', data.statusSeries);
+            if (trendWidget) {
+                const trendRow = document.createElement('div');
+                trendRow.className = 'bn-widget-grid';
+                trendRow.style.gridTemplateColumns = '1fr';
+                trendRow.appendChild(trendWidget);
+                container.appendChild(trendRow);
+            }
+        }
+
         // --- Row 3: Devices + Destinations ---
         const row3 = document.createElement('div');
         row3.className = 'bn-widget-grid';
         row3.appendChild(buildBarWidget('Devices', data.devices, 15, 'teal'));
-        row3.appendChild(buildBarWidget('Resolver Destinations', data.destinations, 15, 'blue'));
+        row3.appendChild(buildBarWidget('Resolver Destinations', data.countries, 20, 'blue'));
         container.appendChild(row3);
+
+        // --- Row 3b: GAFAM Ring ---
+        if (data.gafam && resolveItems(data.gafam).length > 0) {
+            const gafamRow = document.createElement('div');
+            gafamRow.className = 'bn-widget-grid';
+            gafamRow.appendChild(buildRingWidget('Big Tech Traffic (GAFAM)', resolveItems(data.gafam), ['#4285F4','#A2AAAD','#1877F2','#FF9900','#F25022','#7f5af0','#2cb67d','#e53170']));
+            gafamRow.appendChild(buildBarWidget('Big Tech Breakdown', data.gafam, 10, 'orange'));
+            container.appendChild(gafamRow);
+        }
 
         // --- Row 4: DNSSEC + Encryption + Protocols (3-col) ---
         const row4 = document.createElement('div');
@@ -3940,6 +4292,161 @@ function addGlobalStyle(css) {
         return widget;
     }
 
+    function buildTrendWidget(title, seriesData) {
+        const widget = document.createElement('div');
+        widget.className = 'bn-widget';
+        const h4 = document.createElement('h4');
+        h4.textContent = title;
+        widget.appendChild(h4);
+
+        // Parse series data — NextDNS returns { data: [ { status, queries, series: [{timestamp, queries}] } ] } or similar
+        let seriesArr = [];
+        if (seriesData?.data && Array.isArray(seriesData.data)) {
+            seriesArr = seriesData.data;
+        } else if (Array.isArray(seriesData)) {
+            seriesArr = seriesData;
+        }
+
+        if (seriesArr.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'widget-empty';
+            empty.textContent = 'No trend data available';
+            widget.appendChild(empty);
+            return widget;
+        }
+
+        // Collect all unique timestamps and build per-status series
+        const statusColors = { default: '#2cb67d', blocked: '#e53170', allowed: '#4ea8de', relayed: '#f0b429' };
+        const statusMap = {};
+        const allTimestamps = new Set();
+
+        seriesArr.forEach(entry => {
+            const name = entry.status || entry.name || 'unknown';
+            const points = entry.series || entry.data || [];
+            statusMap[name] = {};
+            points.forEach(p => {
+                const ts = p.timestamp || p.from || p.t;
+                if (ts) {
+                    allTimestamps.add(ts);
+                    statusMap[name][ts] = p.queries || p.count || p.value || 0;
+                }
+            });
+        });
+
+        const timestamps = [...allTimestamps].sort();
+        if (timestamps.length < 2) return null;
+
+        // Build stacked values per timestamp
+        const statusNames = Object.keys(statusMap);
+        const stacked = timestamps.map(ts => {
+            const vals = {};
+            let total = 0;
+            statusNames.forEach(s => {
+                vals[s] = statusMap[s][ts] || 0;
+                total += vals[s];
+            });
+            return { ts, vals, total };
+        });
+
+        const maxTotal = Math.max(...stacked.map(s => s.total), 1);
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const W = 800, H = 160, padL = 0, padR = 0, padT = 10, padB = 20;
+        const chartW = W - padL - padR;
+        const chartH = H - padT - padB;
+
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.classList.add('bn-trend-svg');
+
+        // Grid lines
+        for (let i = 0; i <= 4; i++) {
+            const y = padT + (chartH / 4) * i;
+            const line = document.createElementNS(svgNS, 'line');
+            line.setAttribute('x1', padL); line.setAttribute('x2', W - padR);
+            line.setAttribute('y1', y); line.setAttribute('y2', y);
+            line.setAttribute('stroke', 'rgba(255,255,255,0.05)'); line.setAttribute('stroke-width', '1');
+            svg.appendChild(line);
+        }
+
+        // Draw area + line for each status (stacked from bottom)
+        const cumulative = timestamps.map(() => 0);
+        statusNames.forEach(status => {
+            const color = statusColors[status] || '#845ef7';
+            const points = [];
+            const areaPoints = [];
+
+            stacked.forEach((d, i) => {
+                const x = padL + (i / (timestamps.length - 1)) * chartW;
+                const prevY = cumulative[i];
+                const val = d.vals[status];
+                const newY = prevY + val;
+                const y = padT + chartH - (newY / maxTotal) * chartH;
+                const baseY = padT + chartH - (prevY / maxTotal) * chartH;
+                points.push(`${x},${y}`);
+                areaPoints.push({ x, y, baseY });
+                cumulative[i] = newY;
+            });
+
+            // Area fill
+            const areaPath = document.createElementNS(svgNS, 'path');
+            let d = `M${areaPoints[0].x},${areaPoints[0].y}`;
+            for (let i = 1; i < areaPoints.length; i++) d += ` L${areaPoints[i].x},${areaPoints[i].y}`;
+            for (let i = areaPoints.length - 1; i >= 0; i--) d += ` L${areaPoints[i].x},${areaPoints[i].baseY}`;
+            d += ' Z';
+            areaPath.setAttribute('d', d);
+            areaPath.setAttribute('fill', color);
+            areaPath.setAttribute('opacity', '0.2');
+            svg.appendChild(areaPath);
+
+            // Line
+            const polyline = document.createElementNS(svgNS, 'polyline');
+            polyline.setAttribute('points', points.join(' '));
+            polyline.setAttribute('fill', 'none');
+            polyline.setAttribute('stroke', color);
+            polyline.setAttribute('stroke-width', '2');
+            polyline.setAttribute('stroke-linejoin', 'round');
+            svg.appendChild(polyline);
+        });
+
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'bn-trend-chart';
+        chartDiv.appendChild(svg);
+
+        // Time labels
+        const labels = document.createElement('div');
+        labels.className = 'bn-trend-labels';
+        const firstDate = new Date(timestamps[0]);
+        const lastDate = new Date(timestamps[timestamps.length - 1]);
+        const midDate = new Date(timestamps[Math.floor(timestamps.length / 2)]);
+        const fmt = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        [firstDate, midDate, lastDate].forEach(d => {
+            const span = document.createElement('span');
+            span.textContent = fmt(d);
+            labels.appendChild(span);
+        });
+        chartDiv.appendChild(labels);
+
+        // Legend
+        const legend = document.createElement('div');
+        legend.className = 'bn-trend-legend';
+        statusNames.forEach(status => {
+            const item = document.createElement('div');
+            item.className = 'bn-trend-legend-item';
+            const dot = document.createElement('span');
+            dot.className = 'bn-trend-legend-dot';
+            dot.style.background = statusColors[status] || '#845ef7';
+            const label = document.createElement('span');
+            label.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            item.append(dot, label);
+            legend.appendChild(item);
+        });
+        chartDiv.appendChild(legend);
+
+        widget.appendChild(chartDiv);
+        return widget;
+    }
+
     // --- Analytics Export ---
     function csvEscape(val) {
         const s = String(val);
@@ -3964,7 +4471,8 @@ function addGlobalStyle(css) {
         addSection('Encryption', analyticsCache.encryption);
         addSection('Protocols', analyticsCache.protocols);
         addSection('IP Versions', analyticsCache.ipVersions);
-        addSection('Destinations', analyticsCache.destinations);
+        addSection('Destinations (Countries)', analyticsCache.countries);
+        addSection('Big Tech (GAFAM)', analyticsCache.gafam);
         downloadFile(sections.join('\n'), `nextdns-analytics-${pid}.csv`, 'text/csv');
         showToast('Full analytics exported as CSV.');
     }
@@ -3976,28 +4484,26 @@ function addGlobalStyle(css) {
         showToast('Full analytics exported as JSON.');
     }
 
-    // --- SCHEDULED LOG DOWNLOADS ---
+    // --- SCHEDULED LOG DOWNLOADS (via chrome.alarms in background) ---
     function initScheduledLogs() {
-        if (!scheduledLogsConfig.enabled) return;
-        if (scheduledLogTimer) clearInterval(scheduledLogTimer);
+        // Notify background service worker to configure the alarm
+        chrome.runtime.sendMessage({ type: 'RECONFIGURE_SCHEDULED_LOGS' });
 
-        const intervals = { hourly: 3600000, daily: 86400000, weekly: 604800000 };
-        const intervalMs = intervals[scheduledLogsConfig.interval] || 86400000;
+        // Check if background has a pending log download ready for us
+        checkPendingScheduledLog();
+    }
 
-        const checkAndDownload = async () => {
-            // Only auto-download when on the logs page to avoid surprise downloads
-            if (!/\/logs/.test(location.href)) return;
-            const now = Date.now();
-            const lastRun = scheduledLogsConfig.lastRun || 0;
-            if (now - lastRun >= intervalMs) {
-                await quickDownloadLogs();
-                scheduledLogsConfig.lastRun = now;
-                await storage.set({ [KEY_SCHEDULED_LOGS]: scheduledLogsConfig });
+    async function checkPendingScheduledLog() {
+        try {
+            const response = await new Promise((resolve) => {
+                chrome.runtime.sendMessage({ type: 'CHECK_SCHEDULED_LOG' }, resolve);
+            });
+            if (response?.ready && response.csv) {
+                const now = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                downloadFile(response.csv, `nextdns-logs-scheduled-${now}.csv`, 'text/csv');
+                showToast('Scheduled log download saved.', false, 3000);
             }
-        };
-
-        checkAndDownload();
-        scheduledLogTimer = setInterval(checkAndDownload, 60000);
+        } catch {}
     }
 
     // --- PARENTAL CONTROL QUICK TOGGLES ---
@@ -4223,13 +4729,13 @@ function addGlobalStyle(css) {
         if (targetContainer) targetContainer.appendChild(chainEl);
     }
 
-    // --- WEBHOOK/ALERT INTEGRATION ---
-    const webhookSentDomains = new Set();
+    // --- DOMAIN WATCH ALERTS (native notifications + webhook via background) ---
+    const alertedDomains = new Set();
 
     function checkWebhookAlert(domain) {
-        if (!webhookUrl || webhookDomains.length === 0) return;
-        if (webhookSentDomains.has(domain)) return;
-        webhookSentDomains.add(domain);
+        if (!webhookDomains || webhookDomains.length === 0) return;
+        if (alertedDomains.has(domain)) return;
+        alertedDomains.add(domain);
 
         const matches = webhookDomains.some(wd => {
             try {
@@ -4241,19 +4747,9 @@ function addGlobalStyle(css) {
 
         if (!matches) return;
 
+        // Delegate to background for native notification + webhook POST
         try {
-            chrome.runtime.sendMessage({
-                type: 'API_REQUEST',
-                method: 'POST',
-                url: webhookUrl,
-                body: {
-                    event: 'domain_query',
-                    domain: domain,
-                    timestamp: new Date().toISOString(),
-                    profile: getCurrentProfileId(),
-                    source: 'BetterNext v3.4.0'
-                }
-            });
+            chrome.runtime.sendMessage({ type: 'DOMAIN_QUERIED', domain });
         } catch {}
     }
 
@@ -4332,22 +4828,61 @@ function addGlobalStyle(css) {
         const header = document.createElement('div');
         header.className = 'bn-settings-modal-header';
         header.innerHTML = `
-            <h3>⚙️ Settings</h3>
+            <h3>Settings</h3>
             <a href="https://github.com/SysAdminDoc" target="_blank" class="github-link">${icons.github.outerHTML} <span>Open Source on GitHub</span></a>
         `;
         content.appendChild(header);
-        content.innerHTML += `<button class="bn-settings-close-btn">&times;</button>`;
-        content.querySelector('.bn-settings-close-btn').onclick = () => overlay.style.display = 'none';
+
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'bn-settings-close-btn';
+        closeBtn.innerHTML = '&times;';
+        closeBtn.onclick = () => overlay.style.display = 'none';
+        content.appendChild(closeBtn);
+
+        // Tab bar
+        const tabBar = document.createElement('div');
+        tabBar.className = 'bn-settings-tabs';
+        const tabDefs = [
+            { id: 'general', label: 'General' },
+            { id: 'appearance', label: 'Appearance' },
+            { id: 'data', label: 'Data' },
+            { id: 'advanced', label: 'Advanced' }
+        ];
+        const tabPanels = {};
+        tabDefs.forEach((t, i) => {
+            const tab = document.createElement('button');
+            tab.className = `bn-settings-tab${i === 0 ? ' active' : ''}`;
+            tab.textContent = t.label;
+            tab.dataset.tab = t.id;
+            tab.onclick = () => {
+                tabBar.querySelectorAll('.bn-settings-tab').forEach(tb => tb.classList.remove('active'));
+                tab.classList.add('active');
+                Object.values(tabPanels).forEach(p => p.classList.remove('active'));
+                tabPanels[t.id].classList.add('active');
+            };
+            tabBar.appendChild(tab);
+        });
+        content.appendChild(tabBar);
 
         // Create scrollable body container
         const modalBody = document.createElement('div');
         modalBody.className = 'bn-settings-modal-body';
         content.appendChild(modalBody);
 
+        // Create tab panels
+        tabDefs.forEach((t, i) => {
+            const panel = document.createElement('div');
+            panel.className = `bn-settings-tab-panel${i === 0 ? ' active' : ''}`;
+            panel.id = `bn-tab-${t.id}`;
+            tabPanels[t.id] = panel;
+            modalBody.appendChild(panel);
+        });
+
+        // ===== GENERAL TAB =====
         // API Key Section
         const apiSection = document.createElement('div');
         apiSection.className = 'bn-settings-section';
-        apiSection.innerHTML = `<label>🔑 API Key</label>`;
+        apiSection.innerHTML = `<label>API Key</label>`;
 
         const apiControls = document.createElement('div');
         apiControls.className = 'bn-settings-controls';
@@ -4390,12 +4925,12 @@ function addGlobalStyle(css) {
 
         apiControls.append(apiWrapper, apiSaveBtn);
         apiSection.appendChild(apiControls);
-        modalBody.appendChild(apiSection);
+        tabPanels.general.appendChild(apiSection);
 
-        // Appearance Section
+        // ===== APPEARANCE TAB =====
         const appearSection = document.createElement('div');
         appearSection.className = 'bn-settings-section';
-        appearSection.innerHTML = `<label>🎨 Appearance</label>`;
+        appearSection.innerHTML = `<label>Theme & Display</label>`;
 
         const appearControls = document.createElement('div');
         appearControls.className = 'bn-settings-controls';
@@ -4471,12 +5006,12 @@ function addGlobalStyle(css) {
         });
 
         appearSection.appendChild(appearControls);
-        modalBody.appendChild(appearSection);
+        tabPanels.appearance.appendChild(appearSection);
 
-        // Data Management Section
+        // ===== DATA TAB =====
         const dataSection = document.createElement('div');
         dataSection.className = 'bn-settings-section';
-        dataSection.innerHTML = `<label>📦 Data Management</label>`;
+        dataSection.innerHTML = `<label>Data Management</label>`;
 
         const dataControls = document.createElement('div');
         dataControls.className = 'bn-settings-controls';
@@ -4545,12 +5080,12 @@ function addGlobalStyle(css) {
 
         dataControls.append(exportHostsBtn, exportProfileBtn, importBtn, exportListBtn, clearBtn);
         dataSection.appendChild(dataControls);
-        modalBody.appendChild(dataSection);
+        tabPanels.data.appendChild(dataSection);
 
         // HaGeZi Section
         const hageziSection = document.createElement('div');
         hageziSection.className = 'bn-settings-section';
-        hageziSection.innerHTML = `<label>🛡️ HaGeZi TLD Management</label><div class="settings-section-description">Apply or remove TLDs from HaGeZi Spam TLDs list.</div>`;
+        hageziSection.innerHTML = `<label>HaGeZi TLD Management</label><div class="settings-section-description">Apply or remove TLDs from HaGeZi Spam TLDs list.</div>`;
 
         const hageziControls = document.createElement('div');
         hageziControls.className = 'bn-settings-controls';
@@ -4571,12 +5106,12 @@ function addGlobalStyle(css) {
         });
 
         hageziSection.appendChild(hageziControls);
-        modalBody.appendChild(hageziSection);
+        tabPanels.data.appendChild(hageziSection);
 
-        // --- v3.4: Advanced Features Section ---
+        // ===== ADVANCED TAB =====
         const advancedSection = document.createElement('div');
         advancedSection.className = 'bn-settings-section';
-        advancedSection.innerHTML = `<label>🚀 Advanced Features</label>`;
+        advancedSection.innerHTML = `<label>Profile Management</label>`;
 
         const advancedControls = document.createElement('div');
         advancedControls.className = 'bn-settings-controls';
@@ -4615,16 +5150,16 @@ function addGlobalStyle(css) {
 
         advancedControls.prepend(importProfileBtn, cloneProfileBtn);
         advancedSection.appendChild(advancedControls);
-        modalBody.appendChild(advancedSection);
+        tabPanels.advanced.appendChild(advancedSection);
 
-        // --- v3.4: DNS Rewrites Section ---
+        // --- DNS Rewrites Section ---
         const rewriteSection = document.createElement('div');
         rewriteSection.className = 'bn-settings-section';
-        rewriteSection.innerHTML = `<label>🔄 DNS Rewrites</label>`;
+        rewriteSection.innerHTML = `<label>DNS Rewrites</label>`;
         const rewriteContainer = document.createElement('div');
         rewriteContainer.className = 'bn-rewrite-panel';
         rewriteSection.appendChild(rewriteContainer);
-        modalBody.appendChild(rewriteSection);
+        tabPanels.advanced.appendChild(rewriteSection);
 
         // Load rewrites when section becomes visible
         const rewriteLoadBtn = document.createElement('button');
@@ -4633,14 +5168,14 @@ function addGlobalStyle(css) {
         rewriteLoadBtn.onclick = () => initRewritePanel(rewriteContainer);
         rewriteContainer.appendChild(rewriteLoadBtn);
 
-        // --- v3.4: Parental Controls Section ---
+        // --- Parental Controls Section ---
         const parentalSection = document.createElement('div');
         parentalSection.className = 'bn-settings-section';
-        parentalSection.innerHTML = `<label>👪 Parental Controls</label>`;
+        parentalSection.innerHTML = `<label>Parental Controls</label>`;
         const parentalContainer = document.createElement('div');
         parentalContainer.className = 'bn-parental-section';
         parentalSection.appendChild(parentalContainer);
-        modalBody.appendChild(parentalSection);
+        tabPanels.advanced.appendChild(parentalSection);
 
         const parentalLoadBtn = document.createElement('button');
         parentalLoadBtn.textContent = 'Load Parental Controls';
@@ -4648,30 +5183,30 @@ function addGlobalStyle(css) {
         parentalLoadBtn.onclick = () => initParentalControls(parentalContainer);
         parentalContainer.appendChild(parentalLoadBtn);
 
-        // --- v3.4: Regex Patterns Section ---
+        // --- Regex Patterns Section ---
         const regexSection = document.createElement('div');
         regexSection.className = 'bn-settings-section';
-        regexSection.innerHTML = `<label>🔍 Regex Log Highlighting</label><div class="settings-section-description">Highlight log entries matching custom patterns.</div>`;
+        regexSection.innerHTML = `<label>Regex Log Highlighting</label><div class="settings-section-description">Highlight log entries matching custom patterns.</div>`;
         const regexContainer = document.createElement('div');
         regexContainer.className = 'bn-regex-manager';
         regexSection.appendChild(regexContainer);
-        modalBody.appendChild(regexSection);
+        tabPanels.advanced.appendChild(regexSection);
         buildRegexManager(regexContainer);
 
-        // --- v3.4: Webhook Section ---
+        // --- Webhook Section ---
         const webhookSection = document.createElement('div');
         webhookSection.className = 'bn-settings-section';
-        webhookSection.innerHTML = `<label>🔔 Webhook Alerts</label><div class="settings-section-description">Send alerts when watched domains are queried.</div>`;
+        webhookSection.innerHTML = `<label>Webhook Alerts</label><div class="settings-section-description">Send alerts when watched domains are queried.</div>`;
         const webhookContainer = document.createElement('div');
         webhookContainer.className = 'bn-webhook-config';
         webhookSection.appendChild(webhookContainer);
-        modalBody.appendChild(webhookSection);
+        tabPanels.advanced.appendChild(webhookSection);
         buildWebhookConfig(webhookContainer);
 
-        // --- v3.4: Scheduled Logs Section ---
+        // --- Scheduled Logs Section ---
         const schedSection = document.createElement('div');
         schedSection.className = 'bn-settings-section';
-        schedSection.innerHTML = `<label>📅 Scheduled Log Downloads</label>`;
+        schedSection.innerHTML = `<label>Scheduled Log Downloads</label>`;
         const schedControls = document.createElement('div');
         schedControls.className = 'bn-settings-controls';
 
@@ -4710,8 +5245,8 @@ function addGlobalStyle(css) {
             schedToggle.classList.toggle('active', scheduledLogsConfig.enabled);
             schedConfig.style.display = scheduledLogsConfig.enabled ? 'flex' : 'none';
             await storage.set({ [KEY_SCHEDULED_LOGS]: scheduledLogsConfig });
-            if (scheduledLogsConfig.enabled) initScheduledLogs();
-            else if (scheduledLogTimer) { clearInterval(scheduledLogTimer); scheduledLogTimer = null; }
+            // Notify background to reconfigure alarm
+            chrome.runtime.sendMessage({ type: 'RECONFIGURE_SCHEDULED_LOGS' });
         };
 
         schedRow.appendChild(schedToggle);
@@ -4719,7 +5254,7 @@ function addGlobalStyle(css) {
         schedConfig.appendChild(schedStatus);
         schedControls.append(schedRow, schedConfig);
         schedSection.appendChild(schedControls);
-        modalBody.appendChild(schedSection);
+        tabPanels.general.appendChild(schedSection);
 
         return overlay;
     }
@@ -4796,39 +5331,39 @@ function addGlobalStyle(css) {
         filterSection.id = 'bn-section-filters';
         filterSection.className = 'bn-section';
 
-        const filterButtons = [
-            { key: 'hideList', label: 'Hide Hidden', tooltip: 'Hide domains in your hidden list' },
-            { key: 'hideBlocked', label: 'Hide Blocked', tooltip: 'Hide blocked queries from log' },
-            { key: 'showOnlyWhitelisted', label: 'Show Allowed Only', tooltip: 'Show only allowed queries' }
-        ];
+        const filterLabel = document.createElement('div');
+        filterLabel.className = 'bn-section-label';
+        filterLabel.textContent = 'Filters';
+        filterSection.appendChild(filterLabel);
 
-        filterButtons.forEach(({ key, label, tooltip }) => {
+        // Row 1: Show filters
+        const showGroup = document.createElement('div');
+        showGroup.className = 'bn-filter-group';
+        const mkBtn = (id, label, tooltip, onclick) => {
             const b = document.createElement('button');
-            b.id = `toggle-${key}`;
+            b.id = id;
             b.textContent = label;
             b.className = 'bn-panel-button bn-tooltip';
             b.dataset.tooltip = tooltip;
-            b.onclick = () => toggleFeature(key);
-            filterSection.appendChild(b);
-        });
+            b.onclick = onclick;
+            return b;
+        };
+        showGroup.appendChild(mkBtn('toggle-showOnlyWhitelisted', 'Allowed Only', 'Show only allowed queries', () => toggleFeature('showOnlyWhitelisted')));
+        showGroup.appendChild(mkBtn('toggle-blockedOnly', 'Blocked Only', 'Use NextDNS native filter', () => toggleNativeCheckbox('blocked-queries-only', 'toggle-blockedOnly')));
+        filterSection.appendChild(showGroup);
 
-        // Native NextDNS toggle: Show Blocked Only
-        const blockedOnlyBtn = document.createElement('button');
-        blockedOnlyBtn.id = 'toggle-blockedOnly';
-        blockedOnlyBtn.textContent = 'Show Blocked Only';
-        blockedOnlyBtn.className = 'bn-panel-button bn-tooltip';
-        blockedOnlyBtn.dataset.tooltip = 'Use NextDNS native filter to show only blocked queries';
-        blockedOnlyBtn.onclick = () => toggleNativeCheckbox('blocked-queries-only', 'toggle-blockedOnly');
-        filterSection.appendChild(blockedOnlyBtn);
+        // Row 2: Hide filters
+        const hideGroup = document.createElement('div');
+        hideGroup.className = 'bn-filter-group';
+        hideGroup.appendChild(mkBtn('toggle-hideBlocked', 'Hide Blocked', 'Hide blocked queries from log', () => toggleFeature('hideBlocked')));
+        hideGroup.appendChild(mkBtn('toggle-hideList', 'Hide Hidden', 'Hide domains in your hidden list', () => toggleFeature('hideList')));
+        filterSection.appendChild(hideGroup);
 
-        // Native NextDNS toggle: Raw DNS Logs
-        const rawLogsBtn = document.createElement('button');
-        rawLogsBtn.id = 'toggle-rawDnsLogs';
-        rawLogsBtn.textContent = 'Raw DNS Logs';
-        rawLogsBtn.className = 'bn-panel-button bn-tooltip';
-        rawLogsBtn.dataset.tooltip = 'Show raw DNS logs with more technical details';
-        rawLogsBtn.onclick = () => toggleNativeCheckbox('advanced-mode', 'toggle-rawDnsLogs');
-        filterSection.appendChild(rawLogsBtn);
+        // Divider + Raw DNS
+        const divider = document.createElement('div');
+        divider.className = 'bn-filter-divider';
+        filterSection.appendChild(divider);
+        filterSection.appendChild(mkBtn('toggle-rawDnsLogs', 'Raw DNS Logs', 'Show raw DNS logs', () => toggleNativeCheckbox('advanced-mode', 'toggle-rawDnsLogs')));
 
         content.appendChild(filterSection);
 
@@ -4839,9 +5374,9 @@ function addGlobalStyle(css) {
 
         const autoRefreshBtn = document.createElement('button');
         autoRefreshBtn.id = 'toggle-autoRefresh';
-        autoRefreshBtn.textContent = '🔄 Auto Refresh (5s)';
+        autoRefreshBtn.textContent = '🔄 Live Stream';
         autoRefreshBtn.className = 'bn-panel-button bn-tooltip';
-        autoRefreshBtn.dataset.tooltip = 'Automatically refresh logs every 5 seconds';
+        autoRefreshBtn.dataset.tooltip = 'Real-time log streaming via SSE (falls back to 5s polling)';
         autoRefreshBtn.onclick = () => toggleFeature('autoRefresh');
 
         autoRefreshSection.appendChild(autoRefreshBtn);
@@ -4891,10 +5426,20 @@ function addGlobalStyle(css) {
         bulkDeleteSection.append(bulkDeleteBtn, stopBulkDeleteBtn, bulkDeleteStatus);
         content.appendChild(bulkDeleteSection);
 
+        // --- RESIZE GRIP ---
+        const grip = document.createElement('div');
+        grip.className = 'bn-resize-grip';
+        for (let i = 0; i < 5; i++) {
+            const dot = document.createElement('div');
+            dot.className = 'bn-resize-grip-dot';
+            grip.appendChild(dot);
+        }
+        panel.appendChild(grip);
+
         // --- PANEL FOOTER ---
         const footer = document.createElement('div');
         footer.className = 'bn-panel-footer';
-        footer.textContent = 'BetterNext v3.4';
+        footer.textContent = 'BetterNext v3.5';
         panel.appendChild(footer);
 
         document.body.appendChild(panel);
@@ -4904,7 +5449,9 @@ function addGlobalStyle(css) {
         function updatePanelVisibility() {
             const currentPath = location.pathname;
             const isLogsPage = currentPath.includes('/logs');
+            const isAnalyticsPage = currentPath.includes('/analytics');
             const isListPage = /\/denylist|\/allowlist/.test(currentPath);
+            const hasContextSections = isLogsPage || isListPage;
 
             // Get section elements
             const logActionSection = document.getElementById('bn-section-logActions');
@@ -4913,25 +5460,15 @@ function addGlobalStyle(css) {
             const preloadSection = document.getElementById('bn-section-preload');
             const bulkDeleteSection = document.getElementById('bn-section-bulkDelete');
 
-            // Log page sections: only on logs page
-            if (logActionSection) {
-                logActionSection.style.display = isLogsPage ? '' : 'none';
-            }
-            if (filterSection) {
-                filterSection.style.display = isLogsPage ? '' : 'none';
-            }
-            if (autoRefreshSection) {
-                autoRefreshSection.style.display = isLogsPage ? '' : 'none';
-            }
-            if (preloadSection) {
-                preloadSection.style.display = isLogsPage ? '' : 'none';
-            }
+            // Log Actions: logs + analytics pages
+            if (logActionSection) logActionSection.style.display = (isLogsPage || isAnalyticsPage) ? '' : 'none';
+            // Log-only sections
+            if (filterSection) filterSection.style.display = isLogsPage ? '' : 'none';
+            if (autoRefreshSection) autoRefreshSection.style.display = isLogsPage ? '' : 'none';
+            if (preloadSection) preloadSection.style.display = isLogsPage ? '' : 'none';
 
             // Bulk Delete: only on denylist/allowlist pages
-            if (bulkDeleteSection) {
-                bulkDeleteSection.style.display = isListPage ? '' : 'none';
-            }
-
+            if (bulkDeleteSection) bulkDeleteSection.style.display = isListPage ? '' : 'none';
         }
 
         // Call immediately
@@ -4961,7 +5498,7 @@ function addGlobalStyle(css) {
                     const parent = dashboardEl.parentElement;
                     dashboardEl.remove();
                     if (parent) {
-                        parent.querySelectorAll('[data-bn-hidden]').forEach(child => {
+                        parent.querySelectorAll('[data-ndns-hidden]').forEach(child => {
                             child.style.display = '';
                             delete child.dataset.ndnsHidden;
                         });
@@ -5353,9 +5890,15 @@ function addGlobalStyle(css) {
         logCountersElement = document.createElement('div');
         logCountersElement.className = 'bn-log-counters';
         logCountersElement.innerHTML = `
-            <span>Visible: <span class="counter-value visible-count">0</span></span>
-            <span>Filtered: <span class="counter-value filtered-count">0</span></span>
-            <span>Total: <span class="counter-value total-count">0</span></span>
+            <div class="bn-log-counters-row">
+                <span>Visible: <span class="counter-value visible-count">0</span></span>
+                <span>Filtered: <span class="counter-value filtered-count">0</span></span>
+                <span>Total: <span class="counter-value total-count">0</span></span>
+            </div>
+            <div class="bn-log-bar">
+                <div class="bn-log-bar-seg visible" style="width:100%"></div>
+                <div class="bn-log-bar-seg filtered" style="width:0%"></div>
+            </div>
         `;
 
         logsContainer.parentElement.insertBefore(logCountersElement, logsContainer);
@@ -5376,6 +5919,14 @@ function addGlobalStyle(css) {
         if (visibleEl) visibleEl.textContent = visibleCount;
         if (filteredEl) filteredEl.textContent = filteredCount;
         if (totalEl) totalEl.textContent = totalCount;
+
+        // Update proportional bar
+        const visPct = totalCount > 0 ? (visibleCount / totalCount * 100) : 100;
+        const filtPct = totalCount > 0 ? (filteredCount / totalCount * 100) : 0;
+        const visBar = logCountersElement.querySelector('.bn-log-bar-seg.visible');
+        const filtBar = logCountersElement.querySelector('.bn-log-bar-seg.filtered');
+        if (visBar) visBar.style.width = visPct + '%';
+        if (filtBar) filtBar.style.width = filtPct + '%';
     }
 
     // --- BetterNext: Privacy Page - Collapsible Blocklists ---
@@ -5553,8 +6104,8 @@ function addGlobalStyle(css) {
         }
 
         if (globalProfileId) {
-            sessionStorage.setItem('bn_profile_id', globalProfileId);
             await createPanel();
+            if (isUltraCondensed) wrapSectionsForCompact();
             settingsModal = buildSettingsModal();
             document.body.appendChild(settingsModal);
 
@@ -5566,7 +6117,7 @@ function addGlobalStyle(css) {
             }
 
             const returnFlag = await storage.get(['bn_return_from_account']);
-            if (returnFlag.ndns_return_from_account) {
+            if (returnFlag.bn_return_from_account) {
                 await finalizeApiKeySetup();
                 return;
             }
