@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "BetterNext - Enhanced NextDNS Control Panel",
-  "version": "3.4.0",
+  "version": "3.5.0",
   "description": "Enhanced control panel for NextDNS with condensed view, quick actions, analytics dashboard, and consistent UI state across pages.",
   "author": "Matt Parker",
   "homepage_url": "https://github.com/SysAdminDoc",
@@ -12,17 +12,33 @@
   },
   "permissions": [
     "storage",
-    "clipboardWrite"
+    "clipboardWrite",
+    "alarms",
+    "contextMenus",
+    "notifications"
   ],
   "host_permissions": [
     "https://my.nextdns.io/*",
     "https://api.nextdns.io/*",
     "https://raw.githubusercontent.com/*"
   ],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_title": "BetterNext"
+  },
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
+    {
+      "matches": ["https://my.nextdns.io/*"],
+      "js": ["early-inject.js"],
+      "run_at": "document_start"
+    },
     {
       "matches": ["https://my.nextdns.io/*"],
       "js": ["content.js"],
