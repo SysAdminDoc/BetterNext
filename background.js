@@ -52,10 +52,15 @@ async function handleApiRequest(request) {
 }
 
 async function handleFetchText(request) {
-    const { url } = request;
-    
-    const response = await fetch(url);
-    
+    const { url, apiKey } = request;
+
+    const headers = {};
+    if (apiKey) {
+        headers['X-Api-Key'] = apiKey;
+    }
+
+    const response = await fetch(url, { headers });
+
     if (response.ok) {
         return await response.text();
     } else {
