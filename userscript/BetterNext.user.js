@@ -1439,6 +1439,14 @@ function addGlobalStyle(css) {
         .ndns-data-table td.mono { font-family: monospace; }
         .ndns-data-table td.right, .ndns-data-table th.right { text-align: right; }
 
+        /* Trend Chart */
+        .ndns-trend-chart { position: relative; }
+        .ndns-trend-svg { width: 100%; height: 160px; display: block; }
+        .ndns-trend-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--panel-text-secondary); margin-top: 4px; opacity: 0.7; }
+        .ndns-trend-legend { display: flex; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
+        .ndns-trend-legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--panel-text); }
+        .ndns-trend-legend-dot { width: 10px; height: 3px; border-radius: 2px; }
+
         /* Export Bar */
         .ndns-analytics-export-bar {
             display: flex; gap: 8px; align-items: center; justify-content: flex-end;
@@ -3682,7 +3690,7 @@ function addGlobalStyle(css) {
 
             console.log('[NDNS] Fetching analytics for profile:', pid);
 
-            const [domains, blockedDomains, statusData, dnssecData, encryptionData, protocolsData, queryTypesData, ipVersionsData, destinationsData, devicesData] = await Promise.all([
+            const [domains, blockedDomains, statusData, dnssecData, encryptionData, protocolsData, queryTypesData, ipVersionsData, devicesData, countriesData, gafamData, statusSeries] = await Promise.all([
                 safeApi('domains?limit=50'),
                 safeApi('domains?status=blocked&limit=30'),
                 safeApi('status'),
@@ -3691,8 +3699,10 @@ function addGlobalStyle(css) {
                 safeApi('protocols'),
                 safeApi('queryTypes'),
                 safeApi('ipVersions'),
-                safeApi('destinations'),
-                safeApi('devices')
+                safeApi('devices'),
+                safeApi('destinations?type=countries&limit=20'),
+                safeApi('destinations?type=gafam'),
+                safeApi('status;series?from=-24h&interval=1h')
             ]);
 
             console.log('[NDNS] Analytics data loaded successfully');
@@ -3709,7 +3719,8 @@ function addGlobalStyle(css) {
                 domains: excludeDomain(norm(domains)), blocked: excludeDomain(norm(blockedDomains)), status: norm(statusData),
                 dnssec: norm(dnssecData), encryption: norm(encryptionData), protocols: norm(protocolsData),
                 queryTypes: norm(queryTypesData), ipVersions: norm(ipVersionsData),
-                destinations: norm(destinationsData), devices: norm(devicesData)
+                devices: norm(devicesData), countries: norm(countriesData), gafam: norm(gafamData),
+                statusSeries: statusSeries
             };
 
             loading.remove();
@@ -3773,12 +3784,33 @@ function addGlobalStyle(css) {
         row2.appendChild(buildBarWidget('Top Blocked Domains', data.blocked, 30, 'red'));
         container.appendChild(row2);
 
+        // --- Trend Chart (24h query activity) ---
+        if (data.statusSeries) {
+            const trendWidget = buildTrendWidget('Query Activity (24h)', data.statusSeries);
+            if (trendWidget) {
+                const trendRow = document.createElement('div');
+                trendRow.className = 'ndns-widget-grid';
+                trendRow.style.gridTemplateColumns = '1fr';
+                trendRow.appendChild(trendWidget);
+                container.appendChild(trendRow);
+            }
+        }
+
         // --- Row 3: Devices + Destinations ---
         const row3 = document.createElement('div');
         row3.className = 'ndns-widget-grid';
         row3.appendChild(buildBarWidget('Devices', data.devices, 15, 'teal'));
-        row3.appendChild(buildBarWidget('Resolver Destinations', data.destinations, 15, 'blue'));
+        row3.appendChild(buildBarWidget('Resolver Destinations', data.countries, 20, 'blue'));
         container.appendChild(row3);
+
+        // --- Row 3b: GAFAM Ring ---
+        if (data.gafam && resolveItems(data.gafam).length > 0) {
+            const gafamRow = document.createElement('div');
+            gafamRow.className = 'ndns-widget-grid';
+            gafamRow.appendChild(buildRingWidget('Big Tech Traffic (GAFAM)', resolveItems(data.gafam), ['#4285F4','#A2AAAD','#1877F2','#FF9900','#F25022','#7f5af0','#2cb67d','#e53170']));
+            gafamRow.appendChild(buildBarWidget('Big Tech Breakdown', data.gafam, 10, 'orange'));
+            container.appendChild(gafamRow);
+        }
 
         // --- Row 4: DNSSEC + Encryption + Protocols (3-col) ---
         const row4 = document.createElement('div');
@@ -3963,6 +3995,152 @@ function addGlobalStyle(css) {
         return widget;
     }
 
+    function buildTrendWidget(title, seriesData) {
+        const widget = document.createElement('div');
+        widget.className = 'ndns-widget';
+        const h4 = document.createElement('h4');
+        h4.textContent = title;
+        widget.appendChild(h4);
+
+        let seriesArr = [];
+        if (seriesData?.data && Array.isArray(seriesData.data)) {
+            seriesArr = seriesData.data;
+        } else if (Array.isArray(seriesData)) {
+            seriesArr = seriesData;
+        }
+
+        if (seriesArr.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'widget-empty';
+            empty.textContent = 'No trend data available';
+            widget.appendChild(empty);
+            return widget;
+        }
+
+        const statusColors = { default: '#2cb67d', blocked: '#e53170', allowed: '#4ea8de', relayed: '#f0b429' };
+        const statusMap = {};
+        const allTimestamps = new Set();
+
+        seriesArr.forEach(entry => {
+            const name = entry.status || entry.name || 'unknown';
+            const points = entry.series || entry.data || [];
+            statusMap[name] = {};
+            points.forEach(p => {
+                const ts = p.timestamp || p.from || p.t;
+                if (ts) {
+                    allTimestamps.add(ts);
+                    statusMap[name][ts] = p.queries || p.count || p.value || 0;
+                }
+            });
+        });
+
+        const timestamps = [...allTimestamps].sort();
+        if (timestamps.length < 2) return null;
+
+        const statusNames = Object.keys(statusMap);
+        const stacked = timestamps.map(ts => {
+            const vals = {};
+            let total = 0;
+            statusNames.forEach(s => {
+                vals[s] = statusMap[s][ts] || 0;
+                total += vals[s];
+            });
+            return { ts, vals, total };
+        });
+
+        const maxTotal = Math.max(...stacked.map(s => s.total), 1);
+        const svgNS = 'http://www.w3.org/2000/svg';
+        const W = 800, H = 160, padL = 0, padR = 0, padT = 10, padB = 20;
+        const chartW = W - padL - padR;
+        const chartH = H - padT - padB;
+
+        const svg = document.createElementNS(svgNS, 'svg');
+        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        svg.setAttribute('preserveAspectRatio', 'none');
+        svg.classList.add('ndns-trend-svg');
+
+        for (let i = 0; i <= 4; i++) {
+            const y = padT + (chartH / 4) * i;
+            const line = document.createElementNS(svgNS, 'line');
+            line.setAttribute('x1', padL); line.setAttribute('x2', W - padR);
+            line.setAttribute('y1', y); line.setAttribute('y2', y);
+            line.setAttribute('stroke', 'rgba(255,255,255,0.05)'); line.setAttribute('stroke-width', '1');
+            svg.appendChild(line);
+        }
+
+        const cumulative = timestamps.map(() => 0);
+        statusNames.forEach(status => {
+            const color = statusColors[status] || '#845ef7';
+            const points = [];
+            const areaPoints = [];
+
+            stacked.forEach((d, i) => {
+                const x = padL + (i / (timestamps.length - 1)) * chartW;
+                const prevY = cumulative[i];
+                const val = d.vals[status];
+                const newY = prevY + val;
+                const y = padT + chartH - (newY / maxTotal) * chartH;
+                const baseY = padT + chartH - (prevY / maxTotal) * chartH;
+                points.push(`${x},${y}`);
+                areaPoints.push({ x, y, baseY });
+                cumulative[i] = newY;
+            });
+
+            const areaPath = document.createElementNS(svgNS, 'path');
+            let d = `M${areaPoints[0].x},${areaPoints[0].y}`;
+            for (let i = 1; i < areaPoints.length; i++) d += ` L${areaPoints[i].x},${areaPoints[i].y}`;
+            for (let i = areaPoints.length - 1; i >= 0; i--) d += ` L${areaPoints[i].x},${areaPoints[i].baseY}`;
+            d += ' Z';
+            areaPath.setAttribute('d', d);
+            areaPath.setAttribute('fill', color);
+            areaPath.setAttribute('opacity', '0.2');
+            svg.appendChild(areaPath);
+
+            const polyline = document.createElementNS(svgNS, 'polyline');
+            polyline.setAttribute('points', points.join(' '));
+            polyline.setAttribute('fill', 'none');
+            polyline.setAttribute('stroke', color);
+            polyline.setAttribute('stroke-width', '2');
+            polyline.setAttribute('stroke-linejoin', 'round');
+            svg.appendChild(polyline);
+        });
+
+        const chartDiv = document.createElement('div');
+        chartDiv.className = 'ndns-trend-chart';
+        chartDiv.appendChild(svg);
+
+        const labels = document.createElement('div');
+        labels.className = 'ndns-trend-labels';
+        const firstDate = new Date(timestamps[0]);
+        const lastDate = new Date(timestamps[timestamps.length - 1]);
+        const midDate = new Date(timestamps[Math.floor(timestamps.length / 2)]);
+        const fmt = (d) => d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        [firstDate, midDate, lastDate].forEach(d => {
+            const span = document.createElement('span');
+            span.textContent = fmt(d);
+            labels.appendChild(span);
+        });
+        chartDiv.appendChild(labels);
+
+        const legend = document.createElement('div');
+        legend.className = 'ndns-trend-legend';
+        statusNames.forEach(status => {
+            const item = document.createElement('div');
+            item.className = 'ndns-trend-legend-item';
+            const dot = document.createElement('span');
+            dot.className = 'ndns-trend-legend-dot';
+            dot.style.background = statusColors[status] || '#845ef7';
+            const label = document.createElement('span');
+            label.textContent = status.charAt(0).toUpperCase() + status.slice(1);
+            item.append(dot, label);
+            legend.appendChild(item);
+        });
+        chartDiv.appendChild(legend);
+
+        widget.appendChild(chartDiv);
+        return widget;
+    }
+
     // --- Analytics Export ---
     function csvEscape(val) {
         const s = String(val);
@@ -3987,7 +4165,8 @@ function addGlobalStyle(css) {
         addSection('Encryption', analyticsCache.encryption);
         addSection('Protocols', analyticsCache.protocols);
         addSection('IP Versions', analyticsCache.ipVersions);
-        addSection('Destinations', analyticsCache.destinations);
+        addSection('Destinations (Countries)', analyticsCache.countries);
+        addSection('Big Tech (GAFAM)', analyticsCache.gafam);
         downloadFile(sections.join('\n'), `nextdns-analytics-${pid}.csv`, 'text/csv');
         showToast('Full analytics exported as CSV.');
     }
