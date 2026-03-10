@@ -63,7 +63,7 @@ git clone https://github.com/SysAdminDoc/BetterNext.git
 
 ### Userscript Version
 
-A Tampermonkey/Violentmonkey-compatible userscript is also available at [`userscript/BetterNext.user.js`](userscript/BetterNext.user.js).
+Prefer Tampermonkey or Violentmonkey? The standalone userscript is maintained separately at **[NDNS](https://github.com/SysAdminDoc/NDNS)**.
 
 ---
 
@@ -105,6 +105,15 @@ BetterNext/
 ├── LICENSE
 └── README.md
 ```
+
+---
+
+## Related Tools
+
+| Tool | Type | Best For |
+|------|------|----------|
+| **BetterNext** (this repo) | Chrome extension (MV3) | Chrome/Edge users who want a native extension with Chrome Web Store install and persistent service worker for CORS-free API calls |
+| [NDNS](https://github.com/SysAdminDoc/NDNS) | Userscript | Users of any browser with Tampermonkey or Violentmonkey — same features, works on Firefox, Safari, and all Chromium browsers |
 
 ---
 
