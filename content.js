@@ -540,9 +540,9 @@ function addGlobalStyle(css) {
             opacity: 0;
             transition: opacity 0.2s ease;
         }
-        .bn-panel-button:hover::before { opacity: 1; }
+        .bn-panel-button:hover:not(.active)::before { opacity: 1; }
         .bn-panel-button:disabled { cursor: not-allowed; opacity: 0.4; }
-        .bn-panel-button:hover:not(:disabled) {
+        .bn-panel-button:hover:not(:disabled):not(.active) {
             background: var(--btn-hover-bg);
             transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
@@ -550,11 +550,13 @@ function addGlobalStyle(css) {
         .bn-panel-button:active:not(:disabled) {
             transform: translateY(0);
         }
-        .bn-panel-button.active {
-            background: var(--btn-active-bg);
-            color: white;
-            border-color: transparent;
-            box-shadow: 0 4px 16px rgba(127, 90, 240, 0.3);
+        .bn-panel-button.active,
+        .bn-panel-button.active:hover {
+            background: var(--accent-color);
+            color: #fff;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 12px rgba(127, 90, 240, 0.5), 0 4px 16px rgba(127, 90, 240, 0.3);
+            font-weight: 600;
         }
         .bn-panel-button.danger {
             background: linear-gradient(135deg, var(--danger-color) 0%, #c42860 100%);
@@ -2394,6 +2396,24 @@ function addGlobalStyle(css) {
         }, 1500);
     }
 
+    async function autoGrabApiKeyFromAccountPage() {
+        // Poll for the React-rendered API key div (SPA hydration takes a moment)
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const poll = setInterval(() => {
+                const keyEl = document.querySelector('div.font-monospace');
+                const key = keyEl?.textContent?.trim();
+                if (key && /^[a-f0-9]{20,}/i.test(key)) {
+                    clearInterval(poll);
+                    resolve(key);
+                } else if (++attempts > 20) {
+                    clearInterval(poll);
+                    resolve(null);
+                }
+            }, 300);
+        });
+    }
+
     async function finalizeApiKeySetup() {
         try {
             const data = await storage.get(['bn_api_key_to_transfer']);
@@ -3107,7 +3127,7 @@ function addGlobalStyle(css) {
                     }
                 }
                 if (msg.type === 'error') {
-                    console.warn('[BetterNext] SSE stream error:', msg.error, '- falling back to polling');
+                    console.log('[BetterNext] SSE stream error:', msg.error, '- falling back to polling');
                     cleanupStreamPort();
                     startAutoRefreshPolling();
                 }
@@ -3124,7 +3144,7 @@ function addGlobalStyle(css) {
 
             logStreamPort.postMessage({ action: 'start', profileId: pid, apiKey: BetterNext_API_KEY });
         } catch (err) {
-            console.warn('[BetterNext] SSE connect failed, falling back to polling:', err);
+            console.log('[BetterNext] SSE connect failed, falling back to polling:', err);
             cleanupStreamPort();
             startAutoRefreshPolling();
         }
@@ -3976,7 +3996,7 @@ function addGlobalStyle(css) {
 
         try {
             const safeApi = (endpoint) => makeApiRequest('GET', `/profiles/${pid}/analytics/${endpoint}`, null, BetterNext_API_KEY).catch((err) => {
-                console.warn(`[BetterNext] Analytics API failed for ${endpoint}:`, err?.message || err);
+                console.log(`[BetterNext] Analytics API failed for ${endpoint}:`, err?.message || err);
                 return null;
             });
 
@@ -3994,7 +4014,7 @@ function addGlobalStyle(css) {
                 safeApi('devices'),
                 safeApi('destinations?type=countries&limit=20'),
                 safeApi('destinations?type=gafam'),
-                safeApi('status;series?from=-24h&interval=1h')
+                safeApi('series?from=-24h&interval=1')
             ]);
 
             console.log('[BetterNext] Analytics data loaded successfully');
@@ -6094,6 +6114,18 @@ function addGlobalStyle(css) {
         }
 
         if (location.pathname.includes('/account')) {
+            // Auto-grab API key if we don't have one yet
+            if (!BetterNext_API_KEY) {
+                const key = await autoGrabApiKeyFromAccountPage();
+                if (key) {
+                    BetterNext_API_KEY = key;
+                    await storage.set({ [KEY_API_KEY]: key });
+                    // Redirect to logs page (or last known profile)
+                    const redirectUrl = globalProfileId ? `https://my.nextdns.io/${globalProfileId}/logs` : 'https://my.nextdns.io/';
+                    window.location.href = redirectUrl;
+                    return;
+                }
+            }
             handleAccountPage();
             return;
         }
@@ -6123,7 +6155,8 @@ function addGlobalStyle(css) {
             }
 
             if (!BetterNext_API_KEY) {
-                showOnboardingModal();
+                // Silently redirect to account page to auto-grab the API key
+                window.location.href = 'https://my.nextdns.io/account';
                 return;
             }
 
