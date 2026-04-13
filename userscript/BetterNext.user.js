@@ -2,6 +2,8 @@
 // @name         NextDNS Ultimate Control Panel
 // @namespace    https://github.com/SysAdminDoc
 // @version      3.4.0
+// @updateURL      https://raw.githubusercontent.com/SysAdminDoc/BetterNext/main/userscript/BetterNext.user.js
+// @downloadURL    https://raw.githubusercontent.com/SysAdminDoc/BetterNext/main/userscript/BetterNext.user.js
 // @description  Enhanced control panel for NextDNS with condensed view, quick actions, and consistent UI state across pages.
 // @author       Matt Parker, with community patches
 // @match        https://my.nextdns.io/*
@@ -2198,6 +2200,23 @@ function addGlobalStyle(css) {
         }, 1500);
     }
 
+    async function autoGrabApiKeyFromAccountPage() {
+        return new Promise((resolve) => {
+            let attempts = 0;
+            const poll = setInterval(() => {
+                const keyEl = document.querySelector('div.font-monospace');
+                const key = keyEl?.textContent?.trim();
+                if (key && /^[a-f0-9]{20,}/i.test(key)) {
+                    clearInterval(poll);
+                    resolve(key);
+                } else if (++attempts > 20) {
+                    clearInterval(poll);
+                    resolve(null);
+                }
+            }, 300);
+        });
+    }
+
     async function finalizeApiKeySetup() {
         try {
             const data = await storage.get(['ndns_api_key_to_transfer']);
@@ -3684,7 +3703,7 @@ function addGlobalStyle(css) {
 
         try {
             const safeApi = (endpoint) => makeApiRequest('GET', `/profiles/${pid}/analytics/${endpoint}`, null, NDNS_API_KEY).catch((err) => {
-                console.warn(`[NDNS] Analytics API failed for ${endpoint}:`, err?.message || err);
+                console.log(`[NDNS] Analytics API failed for ${endpoint}:`, err?.message || err);
                 return null;
             });
 
@@ -3702,7 +3721,7 @@ function addGlobalStyle(css) {
                 safeApi('devices'),
                 safeApi('destinations?type=countries&limit=20'),
                 safeApi('destinations?type=gafam'),
-                safeApi('status;series?from=-24h&interval=1h')
+                safeApi('series?from=-24h&interval=1')
             ]);
 
             console.log('[NDNS] Analytics data loaded successfully');
@@ -5745,6 +5764,16 @@ function addGlobalStyle(css) {
         }
 
         if (location.pathname.includes('/account')) {
+            if (!NDNS_API_KEY) {
+                const key = await autoGrabApiKeyFromAccountPage();
+                if (key) {
+                    NDNS_API_KEY = key;
+                    await storage.set({ [KEY_API_KEY]: key });
+                    const redirectUrl = globalProfileId ? `https://my.nextdns.io/${globalProfileId}/logs` : 'https://my.nextdns.io/';
+                    window.location.href = redirectUrl;
+                    return;
+                }
+            }
             handleAccountPage();
             return;
         }
@@ -5774,7 +5803,7 @@ function addGlobalStyle(css) {
             }
 
             if (!NDNS_API_KEY) {
-                showOnboardingModal();
+                window.location.href = 'https://my.nextdns.io/account';
                 return;
             }
 
