@@ -12,7 +12,7 @@
   <a href="https://chromewebstore.google.com/detail/betternext-enhanced-nextd/ekhchbdpkkjlcpelfmdbjapjcenabfgn"><img src="https://img.shields.io/chrome-web-store/v/ekhchbdpkkjlcpelfmdbjapjcenabfgn?style=flat-square&logo=googlechrome&logoColor=white&label=Chrome%20Web%20Store&color=4285F4" alt="Chrome Web Store"></a>
   <img src="https://img.shields.io/badge/Manifest-v3-blue?style=flat-square" alt="Manifest V3">
   <img src="https://img.shields.io/github/license/SysAdminDoc/BetterNext?style=flat-square" alt="License">
-  <img src="https://img.shields.io/badge/version-3.4.0-7f5af0?style=flat-square" alt="Version">
+  <img src="https://img.shields.io/badge/version-3.5.1-7f5af0?style=flat-square" alt="Version">
 </p>
 
 ---
