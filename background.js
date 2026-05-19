@@ -1,5 +1,5 @@
 /**
- * BetterNext - Background Service Worker v3.5.0
+ * BetterNext - Background Service Worker v3.5.1
  * Handles API requests, context menus, scheduled alarms, notifications, and badge updates.
  */
 
@@ -236,7 +236,7 @@ async function checkDomainNotification(domain) {
                     event: 'domain_query',
                     domain: domain,
                     timestamp: new Date().toISOString(),
-                    source: 'BetterNext v3.5.0'
+                    source: 'BetterNext v3.5.1'
                 })
             });
         } catch {}
