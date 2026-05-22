@@ -2,6 +2,11 @@
 
 All notable changes to BetterNext will be documented in this file.
 
+## [v3.5.2] - 2026-05-21
+
+### Fixed
+- **Extension fails to load with "Could not load icon 'icons/icon16.png'"** ([#2](https://github.com/SysAdminDoc/BetterNext/issues/2)) — The repo had been refactored to a single root-level `icon.png` but `manifest.json` still referenced `icons/icon16.png` / `icons/icon48.png` / `icons/icon128.png`, so Chrome refused to load both the unpacked directory and the release ZIP. Regenerated the three required PNGs (16, 48, 128) from the 1024×1024 source via Lanczos resampling and committed them to `icons/`. The release ZIP now contains the directory and `chrome://extensions` → Load unpacked works again.
+
 ## [v3.5.1] - 2026-05-18
 
 ### Fixed

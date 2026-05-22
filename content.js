@@ -1,6 +1,6 @@
 /**
  * BetterNext - Enhanced NextDNS Control Panel
- * Chrome Extension v3.5.1
+ * Chrome Extension v3.5.2
  *
  * Enhanced control panel for NextDNS with condensed view, quick actions,
  * and consistent UI state across pages.
