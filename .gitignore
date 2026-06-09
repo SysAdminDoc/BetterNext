@@ -8,3 +8,7 @@ dist/
 *.log
 CLAUDE.md
 .ai-improve-logs/
+
+# Markdown files local-only (except README)
+*.md
+!README.md
