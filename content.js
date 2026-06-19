@@ -2120,6 +2120,113 @@ function addGlobalStyle(css) {
         }
     }
 
+    // --- Export Filtered Log View ---
+    function exportFilteredLogs(format = 'csv') {
+        const rows = document.querySelectorAll('div.list-group-item.log');
+        const entries = [];
+
+        rows.forEach(row => {
+            if (row.style.display === 'none') return; // Skip filtered-out rows
+            const domain = row.dataset.ndnsDomain || '';
+            if (!domain) return;
+
+            const isBlocked = row.classList.contains('bn-row-blocked') || row.dataset.ndnsBlocked === '1';
+            const isAllowed = row.classList.contains('bn-row-allowed') || row.dataset.ndnsAllowed === '1';
+            const status = isBlocked ? 'blocked' : (isAllowed ? 'allowed' : 'default');
+
+            // Try to extract reason
+            const reasonEl = row.querySelector('.bn-reason-info');
+            const reason = reasonEl ? reasonEl.textContent.trim() : '';
+
+            // Try to extract timestamp from the row
+            const timeEl = row.querySelector('.text-muted') || row.querySelector('small');
+            const timestamp = timeEl ? timeEl.textContent.trim() : '';
+
+            entries.push({ domain, status, reason, timestamp });
+        });
+
+        if (entries.length === 0) {
+            showToast('No visible log entries to export.', true);
+            return;
+        }
+
+        const profileId = getCurrentProfileId() || 'unknown';
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+
+        if (format === 'csv') {
+            const header = 'domain,status,reason,timestamp';
+            const csvRows = entries.map(e =>
+                `"${e.domain}","${e.status}","${e.reason.replace(/"/g, '""')}","${e.timestamp.replace(/"/g, '""')}"`
+            );
+            downloadFile([header, ...csvRows].join('\n'), `nextdns-filtered-${profileId}-${ts}.csv`, 'text/csv');
+        } else {
+            const jsonl = entries.map(e => JSON.stringify(e)).join('\n');
+            downloadFile(jsonl, `nextdns-filtered-${profileId}-${ts}.jsonl`, 'application/x-ndjson');
+        }
+
+        showToast(`Exported ${entries.length} entries as ${format.toUpperCase()}.`);
+    }
+
+    // --- Bulk Add Visible Domains to Allow/Deny ---
+    async function bulkAddVisibleDomains(mode = 'allow') {
+        const rows = document.querySelectorAll('div.list-group-item.log');
+        const domains = new Set();
+
+        rows.forEach(row => {
+            if (row.style.display === 'none') return;
+            const domain = row.dataset.ndnsDomain;
+            if (domain) domains.add(domain);
+        });
+
+        if (domains.size === 0) {
+            showToast('No visible domains to add.', true);
+            return;
+        }
+
+        const listType = mode === 'deny' ? 'denylist' : 'allowlist';
+        const confirmed = confirm(`Add ${domains.size} unique domains to ${listType}?`);
+        if (!confirmed) return;
+
+        const profileId = getCurrentProfileId();
+        if (!profileId || !BetterNext_API_KEY) {
+            showToast('API Key or Profile ID missing.', true);
+            return;
+        }
+
+        let success = 0;
+        let failed = 0;
+        const total = domains.size;
+        const batchSize = 10;
+        const domainArr = [...domains];
+
+        showToast(`Adding ${total} domains to ${listType}...`, false, 5000);
+
+        for (let i = 0; i < domainArr.length; i += batchSize) {
+            const batch = domainArr.slice(i, i + batchSize);
+            const promises = batch.map(domain =>
+                makeApiRequest('POST', `/profiles/${profileId}/${listType}`, { id: domain, active: true }, BetterNext_API_KEY)
+                    .then(() => { success++; })
+                    .catch(() => { failed++; })
+            );
+            await Promise.all(promises);
+
+            // Rate limit pause between batches
+            if (i + batchSize < domainArr.length) {
+                await new Promise(r => setTimeout(r, 1000));
+            }
+        }
+
+        showToast(`Done: ${success} added, ${failed} failed out of ${total} domains.`);
+
+        if (mode === 'deny') {
+            // Auto-hide denied domains
+            domainArr.forEach(d => hiddenDomains.add(d));
+            await storage.set({ [KEY_HIDDEN_DOMAINS]: [...hiddenDomains] });
+            invalidateLogCache();
+            cleanLogs();
+        }
+    }
+
     // --- NEW: Toggle Ultra Condensed Mode ---
     function applyUltraCondensedMode(enabled) {
         if (ultraCondensedStyleElement) {
@@ -2302,6 +2409,10 @@ function addGlobalStyle(css) {
             { group: 'Actions', label: 'Download Logs (CSV)', hint: '', icon: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z', action: () => { quickDownloadLogs(); } },
             { group: 'Actions', label: 'Toggle Live Stream', hint: '', icon: 'M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z', action: () => { toggleFeature('autoRefresh'); } },
             { group: 'Actions', label: 'Toggle Compact Mode', hint: '', icon: 'M4 14h4v4h2v-6H4v2zm4-4H4v2h6V6H8v4zm8 8h-2v-6h6v2h-4v4zm-2-12v4h4V6h2v6h-6V6h2z', action: () => { isUltraCondensed = !isUltraCondensed; applyUltraCondensedMode(isUltraCondensed); storage.set({ [KEY_ULTRA_CONDENSED]: isUltraCondensed }); showToast(`Compact mode ${isUltraCondensed ? 'enabled' : 'disabled'}`); } },
+            { group: 'Actions', label: 'Export Filtered View (CSV)', hint: '', icon: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z', action: () => { exportFilteredLogs('csv'); } },
+            { group: 'Actions', label: 'Export Filtered View (JSONL)', hint: '', icon: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z', action: () => { exportFilteredLogs('jsonl'); } },
+            { group: 'Actions', label: 'Bulk Allow Visible Domains', hint: '', icon: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z', action: () => { bulkAddVisibleDomains('allow'); } },
+            { group: 'Actions', label: 'Bulk Deny Visible Domains', hint: '', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z', action: () => { bulkAddVisibleDomains('deny'); } },
             // Theme
             { group: 'Theme', label: 'Auto Theme (System)', hint: '', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18V4c4.41 0 8 3.59 8 8s-3.59 8-8 8z', action: async () => { themeAuto = true; await storage.set({ [KEY_THEME_AUTO]: true }); setupThemeAutoSync(); showToast('Theme synced with system'); } },
             { group: 'Theme', label: 'Dark Theme', hint: '', icon: 'M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z', action: async () => { themeAuto = false; applyTheme('dark'); await storage.set({ [KEY_THEME]: 'dark', [KEY_THEME_AUTO]: false }); setupThemeAutoSync(); } },
@@ -3184,6 +3295,7 @@ function addGlobalStyle(css) {
     }
 
     let isCleaningLogs = false; // Guard against re-entry
+    let activeRegexSearch = null; // Current regex search filter
 
     function invalidateLogCache() {
         document.querySelectorAll('div.list-group-item.log[data-ndns-processed]').forEach(row => {
@@ -3357,6 +3469,7 @@ function addGlobalStyle(css) {
             if (filters.hideList && hideByDomainList) isVisible = false;
             if (filters.hideBlocked && isConsideredBlocked) isVisible = false;
             if (filters.showOnlyWhitelisted && !isConsideredAllowed) isVisible = false;
+            if (activeRegexSearch && !activeRegexSearch.test(domain)) isVisible = false;
 
             row.style.display = isVisible ? '' : 'none';
         });
@@ -3368,6 +3481,27 @@ function addGlobalStyle(css) {
         } finally {
             isCleaningLogs = false;
         }
+    }
+
+    function applyRegexSearch(input) {
+        const trimmed = input.trim();
+        if (!trimmed) {
+            activeRegexSearch = null;
+        } else {
+            // Support /pattern/flags syntax
+            const match = trimmed.match(/^\/(.+)\/([gimsuy]*)$/);
+            try {
+                if (match) {
+                    activeRegexSearch = new RegExp(match[1], match[2] || 'i');
+                } else {
+                    activeRegexSearch = new RegExp(trimmed, 'i');
+                }
+            } catch {
+                // Invalid regex — treat as literal substring
+                activeRegexSearch = new RegExp(trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+            }
+        }
+        cleanLogs();
     }
 
     function observeLogs() {
@@ -5717,7 +5851,47 @@ function addGlobalStyle(css) {
         clearLogBtn.dataset.tooltip = 'Delete all log entries';
         clearLogBtn.onclick = quickClearLogs;
 
-        logActionSection.append(downloadLogBtn, clearLogBtn);
+        // Export filtered view
+        const exportFilteredGroup = document.createElement('div');
+        exportFilteredGroup.className = 'bn-filter-group';
+        exportFilteredGroup.style.marginTop = '4px';
+
+        const exportCsvBtn = document.createElement('button');
+        exportCsvBtn.className = 'bn-panel-button bn-btn-sm bn-tooltip';
+        exportCsvBtn.textContent = 'Export CSV';
+        exportCsvBtn.dataset.tooltip = 'Export visible log entries as CSV';
+        exportCsvBtn.onclick = () => exportFilteredLogs('csv');
+
+        const exportJsonlBtn = document.createElement('button');
+        exportJsonlBtn.className = 'bn-panel-button bn-btn-sm bn-tooltip';
+        exportJsonlBtn.textContent = 'Export JSONL';
+        exportJsonlBtn.dataset.tooltip = 'Export visible log entries as JSONL';
+        exportJsonlBtn.onclick = () => exportFilteredLogs('jsonl');
+
+        exportFilteredGroup.append(exportCsvBtn, exportJsonlBtn);
+
+        // Bulk add visible domains
+        const bulkAddGroup = document.createElement('div');
+        bulkAddGroup.className = 'bn-filter-group';
+        bulkAddGroup.style.marginTop = '4px';
+
+        const bulkAllowBtn = document.createElement('button');
+        bulkAllowBtn.className = 'bn-panel-button bn-btn-sm bn-tooltip';
+        bulkAllowBtn.textContent = 'Bulk Allow';
+        bulkAllowBtn.dataset.tooltip = 'Add all visible domains to allowlist';
+        bulkAllowBtn.style.color = 'var(--success-color)';
+        bulkAllowBtn.onclick = () => bulkAddVisibleDomains('allow');
+
+        const bulkDenyBtn = document.createElement('button');
+        bulkDenyBtn.className = 'bn-panel-button bn-btn-sm bn-tooltip';
+        bulkDenyBtn.textContent = 'Bulk Deny';
+        bulkDenyBtn.dataset.tooltip = 'Add all visible domains to denylist';
+        bulkDenyBtn.style.color = 'var(--danger-color)';
+        bulkDenyBtn.onclick = () => bulkAddVisibleDomains('deny');
+
+        bulkAddGroup.append(bulkAllowBtn, bulkDenyBtn);
+
+        logActionSection.append(downloadLogBtn, clearLogBtn, exportFilteredGroup, bulkAddGroup);
         content.appendChild(logActionSection);
 
         // --- FILTER BUTTONS (only on logs page) ---
@@ -5758,6 +5932,45 @@ function addGlobalStyle(css) {
         divider.className = 'bn-filter-divider';
         filterSection.appendChild(divider);
         filterSection.appendChild(mkBtn('toggle-rawDnsLogs', 'Raw DNS Logs', 'Show raw DNS logs', () => toggleNativeCheckbox('advanced-mode', 'toggle-rawDnsLogs')));
+
+        // --- REGEX SEARCH (only on logs page) ---
+        const regexSearchDivider = document.createElement('div');
+        regexSearchDivider.className = 'bn-filter-divider';
+        filterSection.appendChild(regexSearchDivider);
+
+        const regexSearchLabel = document.createElement('div');
+        regexSearchLabel.className = 'bn-section-label';
+        regexSearchLabel.textContent = 'Regex Search';
+        regexSearchLabel.style.cssText = 'font-size: 11px; margin-bottom: 2px;';
+        filterSection.appendChild(regexSearchLabel);
+
+        const regexSearchWrap = document.createElement('div');
+        regexSearchWrap.style.cssText = 'display: flex; gap: 4px; width: 100%;';
+
+        const regexSearchInput = document.createElement('input');
+        regexSearchInput.type = 'text';
+        regexSearchInput.id = 'bn-regex-search';
+        regexSearchInput.className = 'bn-input';
+        regexSearchInput.placeholder = '/pattern/i';
+        regexSearchInput.style.cssText = 'flex: 1; font-size: 11px; padding: 5px 8px; font-family: "SF Mono", "Fira Code", monospace;';
+
+        const regexSearchClear = document.createElement('button');
+        regexSearchClear.textContent = 'Clear';
+        regexSearchClear.className = 'bn-panel-button bn-btn-sm';
+        regexSearchClear.style.cssText = 'font-size: 10px; padding: 3px 8px;';
+
+        let regexSearchTimeout = null;
+        regexSearchInput.addEventListener('input', () => {
+            clearTimeout(regexSearchTimeout);
+            regexSearchTimeout = setTimeout(() => applyRegexSearch(regexSearchInput.value), 200);
+        });
+        regexSearchClear.onclick = () => {
+            regexSearchInput.value = '';
+            applyRegexSearch('');
+        };
+
+        regexSearchWrap.append(regexSearchInput, regexSearchClear);
+        filterSection.appendChild(regexSearchWrap);
 
         // --- SAVED FILTERS (only on logs page) ---
         const savedFilterDivider = document.createElement('div');
