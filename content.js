@@ -1,6 +1,6 @@
 /**
  * BetterNext - Enhanced NextDNS Control Panel
- * Chrome Extension v3.5.2
+ * Chrome Extension v3.6.0
  *
  * Enhanced control panel for NextDNS with condensed view, quick actions,
  * and consistent UI state across pages.
@@ -81,6 +81,9 @@ function addGlobalStyle(css) {
     const KEY_WEBHOOK_URL = `${KEY_PREFIX}webhook_url_v1`;
     const KEY_WEBHOOK_DOMAINS = `${KEY_PREFIX}webhook_domains_v1`;
     const KEY_SHOW_CNAME_CHAIN = `${KEY_PREFIX}show_cname_chain_v1`;
+    // NEW KEYS for v3.6 (UX features)
+    const KEY_THEME_AUTO = `${KEY_PREFIX}theme_auto_v1`;
+    const KEY_SAVED_FILTERS = `${KEY_PREFIX}saved_filters_v1`;
 
     // --- HAGEZI CONFIG ---
     const HAGEZI_TLDS_URL = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/adblock/spam-tlds-adblock-aggressive.txt";
@@ -120,6 +123,10 @@ function addGlobalStyle(css) {
     let webhookUrl = '';
     let webhookDomains = [];
     let showCnameChain = true;
+    // NEW STATE for v3.6 (UX features)
+    let themeAuto = false;
+    let savedFilters = [];
+    let colorSchemeListener = null;
     // SLDs for proper root domain detection (unified list used everywhere)
     const SLDs = new Set(["co", "com", "org", "edu", "gov", "mil", "net", "ac", "or", "ne", "go", "ltd"]);
 
@@ -861,6 +868,75 @@ function addGlobalStyle(css) {
             background: linear-gradient(135deg, var(--danger-color) 0%, #c42860 100%) !important;
             color: white !important;
             border-color: transparent !important;
+        }
+
+        /* ============================================
+           COMMAND PALETTE
+           ============================================ */
+        .bn-cmd-overlay {
+            position: fixed; inset: 0; z-index: 30000;
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+            display: flex; align-items: flex-start; justify-content: center;
+            padding-top: 15vh;
+        }
+        .bn-cmd-container {
+            width: 520px; max-width: 90vw; max-height: 60vh;
+            background: var(--panel-bg-solid, #16161a);
+            border: 1px solid var(--panel-border, rgba(148,161,178,0.1));
+            border-radius: 16px; box-shadow: 0 24px 64px rgba(0,0,0,0.5);
+            overflow: hidden; display: flex; flex-direction: column;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .bn-cmd-input-wrap {
+            display: flex; align-items: center; padding: 14px 16px;
+            border-bottom: 1px solid var(--panel-border);
+        }
+        .bn-cmd-input-wrap svg {
+            width: 18px; height: 18px; fill: var(--panel-text-secondary); flex-shrink: 0; margin-right: 10px;
+        }
+        .bn-cmd-input {
+            flex: 1; background: transparent; border: none; outline: none;
+            color: var(--panel-text, #fff); font-size: 15px;
+        }
+        .bn-cmd-input::placeholder { color: var(--panel-text-secondary); }
+        .bn-cmd-list {
+            overflow-y: auto; padding: 6px; flex: 1;
+        }
+        .bn-cmd-list::-webkit-scrollbar { width: 5px; }
+        .bn-cmd-list::-webkit-scrollbar-track { background: transparent; }
+        .bn-cmd-list::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
+        .bn-cmd-item {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 12px; border-radius: 10px; cursor: pointer;
+            color: var(--panel-text); font-size: 13px;
+            transition: background 0.1s;
+        }
+        .bn-cmd-item:hover, .bn-cmd-item.selected {
+            background: var(--btn-hover-bg, rgba(148,161,178,0.15));
+        }
+        .bn-cmd-item .cmd-icon {
+            width: 20px; height: 20px; display: flex; align-items: center; justify-content: center;
+            color: var(--panel-text-secondary); flex-shrink: 0;
+        }
+        .bn-cmd-item .cmd-label { flex: 1; }
+        .bn-cmd-item .cmd-hint {
+            font-size: 11px; color: var(--panel-text-secondary);
+            padding: 2px 6px; border-radius: 4px; background: var(--btn-bg);
+        }
+        .bn-cmd-group-label {
+            font-size: 11px; color: var(--panel-text-secondary); padding: 8px 12px 4px;
+            text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;
+        }
+        .bn-cmd-empty {
+            padding: 24px; text-align: center; color: var(--panel-text-secondary); font-size: 13px;
+        }
+        .bn-cmd-footer {
+            border-top: 1px solid var(--panel-border); padding: 8px 14px;
+            display: flex; gap: 14px; font-size: 11px; color: var(--panel-text-secondary);
+        }
+        .bn-cmd-footer kbd {
+            display: inline-block; padding: 1px 5px; border-radius: 4px;
+            background: var(--btn-bg); font-family: inherit; font-size: 10px;
         }
 
         /* ============================================
@@ -1894,7 +1970,10 @@ function addGlobalStyle(css) {
             [KEY_SCHEDULED_LOGS]: { enabled: false, interval: 'daily', lastRun: null },
             [KEY_WEBHOOK_URL]: '',
             [KEY_WEBHOOK_DOMAINS]: [],
-            [KEY_SHOW_CNAME_CHAIN]: true
+            [KEY_SHOW_CNAME_CHAIN]: true,
+            // v3.6 features
+            [KEY_THEME_AUTO]: false,
+            [KEY_SAVED_FILTERS]: []
         });
         filters = { ...defaultFilters, ...values[KEY_FILTER_STATE] };
         hiddenDomains = new Set(values[KEY_HIDDEN_DOMAINS]);
@@ -1924,6 +2003,9 @@ function addGlobalStyle(css) {
         webhookUrl = values[KEY_WEBHOOK_URL];
         webhookDomains = values[KEY_WEBHOOK_DOMAINS];
         showCnameChain = values[KEY_SHOW_CNAME_CHAIN];
+        // v3.6 features
+        themeAuto = values[KEY_THEME_AUTO];
+        savedFilters = values[KEY_SAVED_FILTERS];
     }
 
     async function makeApiRequest(method, endpoint, body = null, apiKey = BetterNext_API_KEY, customUrl = null) {
@@ -2108,15 +2190,253 @@ function addGlobalStyle(css) {
         });
     }
 
-    // --- Escape key to close overlays ---
+    // --- Keyboard shortcuts ---
     function setupEscapeHandler() {
         document.addEventListener('keydown', (e) => {
+            // Don't fire shortcuts when typing in inputs
+            const tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.target.isContentEditable) return;
+
             if (e.key === 'Escape') {
+                // Close command palette first if open
+                const palette = document.getElementById('bn-command-palette');
+                if (palette && palette.style.display !== 'none') {
+                    palette.style.display = 'none';
+                    return;
+                }
                 if (settingsModal && settingsModal.style.display !== 'none') {
                     settingsModal.style.display = 'none';
                 }
+                return;
+            }
+
+            // Ctrl+K / Cmd+K — command palette
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+                toggleCommandPalette();
+                return;
+            }
+
+            // Log row keyboard shortcuts (only on logs page)
+            if (!/\/logs/.test(location.pathname)) return;
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+            const hoveredRow = document.querySelector('div.list-group-item.log:hover');
+            if (!hoveredRow) return;
+
+            const domain = hoveredRow.dataset.ndnsDomain;
+            if (!domain) return;
+
+            const rootDomain = extractRootDomain(domain);
+
+            switch (e.key) {
+                case 'a': // Allow domain
+                    e.preventDefault();
+                    sendDomainViaApi(domain, 'allow');
+                    break;
+                case 'A': // Allow root domain (Shift+A)
+                    e.preventDefault();
+                    sendDomainViaApi(rootDomain, 'allow');
+                    break;
+                case 'd': // Deny domain
+                    e.preventDefault();
+                    sendDomainViaApi(domain, 'deny');
+                    break;
+                case 'D': // Deny root domain (Shift+D)
+                    e.preventDefault();
+                    sendDomainViaApi(rootDomain, 'deny');
+                    break;
+                case 'h': // Hide domain
+                    e.preventDefault();
+                    hiddenDomains.add(domain);
+                    storage.set({ [KEY_HIDDEN_DOMAINS]: [...hiddenDomains] });
+                    cleanLogs();
+                    showToast(`Hidden: ${domain}`);
+                    break;
+                case 'H': // Hide root domain (Shift+H)
+                    e.preventDefault();
+                    hiddenDomains.add(rootDomain);
+                    storage.set({ [KEY_HIDDEN_DOMAINS]: [...hiddenDomains] });
+                    cleanLogs();
+                    showToast(`Hidden: ${rootDomain}`);
+                    break;
+                case 'c': // Copy domain
+                    e.preventDefault();
+                    copyToClipboard(domain);
+                    break;
             }
         });
+    }
+
+    // --- COMMAND PALETTE ---
+    function toggleCommandPalette() {
+        let palette = document.getElementById('bn-command-palette');
+        if (palette) {
+            palette.style.display = palette.style.display === 'none' ? 'flex' : 'none';
+            if (palette.style.display === 'flex') {
+                const input = palette.querySelector('.bn-cmd-input');
+                if (input) { input.value = ''; input.focus(); }
+                renderCommandResults(palette, '');
+            }
+            return;
+        }
+
+        const profileId = getCurrentProfileId() || globalProfileId || '';
+        const baseUrl = profileId ? `https://my.nextdns.io/${profileId}` : 'https://my.nextdns.io';
+
+        // Build command list
+        const commands = [
+            // Navigation
+            { group: 'Navigate', label: 'Logs', hint: '', icon: 'M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z', action: () => { window.location.href = `${baseUrl}/logs`; } },
+            { group: 'Navigate', label: 'Analytics', hint: '', icon: 'M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z', action: () => { window.location.href = `${baseUrl}/analytics`; } },
+            { group: 'Navigate', label: 'Allowlist', hint: '', icon: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z', action: () => { window.location.href = `${baseUrl}/allowlist`; } },
+            { group: 'Navigate', label: 'Denylist', hint: '', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z', action: () => { window.location.href = `${baseUrl}/denylist`; } },
+            { group: 'Navigate', label: 'Security', hint: '', icon: 'M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 10.99h7c-.53 4.12-3.28 7.79-7 8.94V12H5V6.3l7-3.11v8.8z', action: () => { window.location.href = `${baseUrl}/security`; } },
+            { group: 'Navigate', label: 'Privacy', hint: '', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z', action: () => { window.location.href = `${baseUrl}/privacy`; } },
+            { group: 'Navigate', label: 'Parental Control', hint: '', icon: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z', action: () => { window.location.href = `${baseUrl}/parentalcontrol`; } },
+            { group: 'Navigate', label: 'DNS Rewrites', hint: '', icon: 'M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z', action: () => { window.location.href = `${baseUrl}/rewrites`; } },
+            { group: 'Navigate', label: 'Settings', hint: '', icon: 'M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.611 3.611 0 0112 15.6z', action: () => { window.location.href = `${baseUrl}/settings`; } },
+            { group: 'Navigate', label: 'Account', hint: '', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z', action: () => { window.location.href = 'https://my.nextdns.io/account'; } },
+            // Actions
+            { group: 'Actions', label: 'Open Settings', hint: '', icon: 'M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z', action: () => { if (settingsModal) settingsModal.style.display = 'flex'; } },
+            { group: 'Actions', label: 'Download Logs (CSV)', hint: '', icon: 'M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z', action: () => { quickDownloadLogs(); } },
+            { group: 'Actions', label: 'Toggle Live Stream', hint: '', icon: 'M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z', action: () => { toggleFeature('autoRefresh'); } },
+            { group: 'Actions', label: 'Toggle Compact Mode', hint: '', icon: 'M4 14h4v4h2v-6H4v2zm4-4H4v2h6V6H8v4zm8 8h-2v-6h6v2h-4v4zm-2-12v4h4V6h2v6h-6V6h2z', action: () => { isUltraCondensed = !isUltraCondensed; applyUltraCondensedMode(isUltraCondensed); storage.set({ [KEY_ULTRA_CONDENSED]: isUltraCondensed }); showToast(`Compact mode ${isUltraCondensed ? 'enabled' : 'disabled'}`); } },
+            // Theme
+            { group: 'Theme', label: 'Auto Theme (System)', hint: '', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18V4c4.41 0 8 3.59 8 8s-3.59 8-8 8z', action: async () => { themeAuto = true; await storage.set({ [KEY_THEME_AUTO]: true }); setupThemeAutoSync(); showToast('Theme synced with system'); } },
+            { group: 'Theme', label: 'Dark Theme', hint: '', icon: 'M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-2.98 0-5.4-2.42-5.4-5.4 0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z', action: async () => { themeAuto = false; applyTheme('dark'); await storage.set({ [KEY_THEME]: 'dark', [KEY_THEME_AUTO]: false }); setupThemeAutoSync(); } },
+            { group: 'Theme', label: 'Light Theme', hint: '', icon: 'M12 7c-2.76 0-5 2.24-5 5s2.24 5 5 5 5-2.24 5-5-2.24-5-5-5zM2 13h2c.55 0 1-.45 1-1s-.45-1-1-1H2c-.55 0-1 .45-1 1s.45 1 1 1zm18 0h2c.55 0 1-.45 1-1s-.45-1-1-1h-2c-.55 0-1 .45-1 1s.45 1 1 1zM11 2v2c0 .55.45 1 1 1s1-.45 1-1V2c0-.55-.45-1-1-1s-1 .45-1 1zm0 18v2c0 .55.45 1 1 1s1-.45 1-1v-2c0-.55-.45-1-1-1s-1 .45-1 1zM5.99 4.58a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0s.39-1.03 0-1.41L5.99 4.58zm12.37 12.37a.996.996 0 00-1.41 0 .996.996 0 000 1.41l1.06 1.06c.39.39 1.03.39 1.41 0a.996.996 0 000-1.41l-1.06-1.06zm1.06-10.96a.996.996 0 000-1.41.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06zM7.05 18.36c.39-.39.39-1.03 0-1.41a.996.996 0 00-1.41 0l-1.06 1.06c-.39.39-.39 1.03 0 1.41s1.03.39 1.41 0l1.06-1.06z', action: async () => { themeAuto = false; applyTheme('light'); await storage.set({ [KEY_THEME]: 'light', [KEY_THEME_AUTO]: false }); setupThemeAutoSync(); } },
+            { group: 'Theme', label: 'Dark Blue Theme', hint: '', icon: 'M12 2l-5.5 9h11L12 2zm0 3.84L13.93 9h-3.87L12 5.84zM17.5 13c-2.49 0-4.5 2.01-4.5 4.5s2.01 4.5 4.5 4.5 4.5-2.01 4.5-4.5-2.01-4.5-4.5-4.5zm0 7a2.5 2.5 0 010-5 2.5 2.5 0 010 5zM3 21.5h8v-8H3v8zm2-6h4v4H5v-4z', action: async () => { themeAuto = false; applyTheme('darkblue'); await storage.set({ [KEY_THEME]: 'darkblue', [KEY_THEME_AUTO]: false }); setupThemeAutoSync(); } },
+            // Filters (logs page)
+            { group: 'Filters', label: 'Show Allowed Only', hint: '', icon: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z', action: () => { toggleFeature('showOnlyWhitelisted'); } },
+            { group: 'Filters', label: 'Show Blocked Only', hint: '', icon: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8 0-1.85.63-3.55 1.69-4.9L16.9 18.31C15.55 19.37 13.85 20 12 20zm6.31-3.1L7.1 5.69C8.45 4.63 10.15 4 12 4c4.42 0 8 3.58 8 8 0 1.85-.63 3.55-1.69 4.9z', action: () => { toggleNativeCheckbox('blocked-queries-only', 'toggle-blockedOnly'); } },
+            { group: 'Filters', label: 'Hide Blocked', hint: '', icon: 'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75C21.27 7.11 17 4.5 12 4.5c-1.6 0-3.14.35-4.6.98l2.1 2.1C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27z', action: () => { toggleFeature('hideBlocked'); } },
+            { group: 'Filters', label: 'Hide Hidden Domains', hint: '', icon: 'M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75C21.27 7.11 17 4.5 12 4.5c-1.6 0-3.14.35-4.6.98l2.1 2.1C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27z', action: () => { toggleFeature('hideList'); } },
+        ];
+
+        // Create palette DOM
+        palette = document.createElement('div');
+        palette.id = 'bn-command-palette';
+        palette.className = 'bn-cmd-overlay';
+        palette.onclick = (e) => { if (e.target === palette) palette.style.display = 'none'; };
+
+        const container = document.createElement('div');
+        container.className = 'bn-cmd-container';
+
+        // Search input
+        const inputWrap = document.createElement('div');
+        inputWrap.className = 'bn-cmd-input-wrap';
+        inputWrap.innerHTML = `<svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>`;
+        const input = document.createElement('input');
+        input.className = 'bn-cmd-input';
+        input.placeholder = 'Type a command...';
+        inputWrap.appendChild(input);
+        container.appendChild(inputWrap);
+
+        // Results list
+        const list = document.createElement('div');
+        list.className = 'bn-cmd-list';
+        container.appendChild(list);
+
+        // Footer
+        const footer = document.createElement('div');
+        footer.className = 'bn-cmd-footer';
+        footer.innerHTML = '<span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span><span><kbd>Enter</kbd> select</span><span><kbd>Esc</kbd> close</span>';
+        container.appendChild(footer);
+
+        palette.appendChild(container);
+        document.body.appendChild(palette);
+
+        // Store commands on palette for reuse
+        palette._commands = commands;
+
+        function renderCommandResults(paletteEl, query) {
+            const cmds = paletteEl._commands;
+            const listEl = paletteEl.querySelector('.bn-cmd-list');
+            listEl.innerHTML = '';
+
+            const q = query.toLowerCase().trim();
+            const filtered = q ? cmds.filter(c => c.label.toLowerCase().includes(q) || c.group.toLowerCase().includes(q)) : cmds;
+
+            if (filtered.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'bn-cmd-empty';
+                empty.textContent = 'No matching commands';
+                listEl.appendChild(empty);
+                return;
+            }
+
+            let currentGroup = '';
+            let selectedIdx = 0;
+            const items = [];
+
+            filtered.forEach((cmd, idx) => {
+                if (cmd.group !== currentGroup) {
+                    currentGroup = cmd.group;
+                    const groupLabel = document.createElement('div');
+                    groupLabel.className = 'bn-cmd-group-label';
+                    groupLabel.textContent = currentGroup;
+                    listEl.appendChild(groupLabel);
+                }
+
+                const item = document.createElement('div');
+                item.className = `bn-cmd-item${idx === 0 ? ' selected' : ''}`;
+                item.innerHTML = `<span class="cmd-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="${cmd.icon}"/></svg></span><span class="cmd-label">${cmd.label}</span>${cmd.hint ? `<span class="cmd-hint">${cmd.hint}</span>` : ''}`;
+                item.onclick = () => {
+                    paletteEl.style.display = 'none';
+                    cmd.action();
+                };
+                item.onmouseenter = () => {
+                    listEl.querySelectorAll('.bn-cmd-item').forEach(i => i.classList.remove('selected'));
+                    item.classList.add('selected');
+                };
+                listEl.appendChild(item);
+                items.push({ el: item, cmd });
+            });
+
+            paletteEl._items = items;
+            paletteEl._selectedIndex = 0;
+        }
+
+        // Attach renderCommandResults as a global
+        palette._renderResults = renderCommandResults;
+
+        // Input handler
+        input.addEventListener('input', () => {
+            renderCommandResults(palette, input.value);
+        });
+
+        // Keyboard navigation inside palette
+        input.addEventListener('keydown', (e) => {
+            const items = palette._items || [];
+            if (items.length === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                palette._selectedIndex = Math.min(palette._selectedIndex + 1, items.length - 1);
+                items.forEach((it, i) => it.el.classList.toggle('selected', i === palette._selectedIndex));
+                items[palette._selectedIndex].el.scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                palette._selectedIndex = Math.max(palette._selectedIndex - 1, 0);
+                items.forEach((it, i) => it.el.classList.toggle('selected', i === palette._selectedIndex));
+                items[palette._selectedIndex].el.scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (items[palette._selectedIndex]) {
+                    palette.style.display = 'none';
+                    items[palette._selectedIndex].cmd.action();
+                }
+            }
+        });
+
+        // Initial render
+        renderCommandResults(palette, '');
+        input.focus();
+    }
+
+    function renderCommandResults(paletteEl, query) {
+        if (paletteEl._renderResults) paletteEl._renderResults(paletteEl, query);
     }
 
     // --- NEW: Copy to Clipboard ---
@@ -3465,6 +3785,27 @@ function addGlobalStyle(css) {
         currentTheme = theme;
     }
 
+    function getSystemTheme() {
+        return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+
+    function setupThemeAutoSync() {
+        // Remove any previous listener
+        if (colorSchemeListener) {
+            window.matchMedia('(prefers-color-scheme: light)').removeEventListener('change', colorSchemeListener);
+            colorSchemeListener = null;
+        }
+        if (!themeAuto) return;
+
+        colorSchemeListener = () => {
+            const sysTheme = getSystemTheme();
+            applyTheme(sysTheme);
+        };
+        window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', colorSchemeListener);
+        // Apply immediately
+        applyTheme(getSystemTheme());
+    }
+
     function applyPanelWidth(width) {
         panel.style.minWidth = `${width}px`;
         panel.style.width = `${width}px`;
@@ -3889,7 +4230,11 @@ function addGlobalStyle(css) {
                 });
             }
         } catch (e) {
-            list.innerHTML = `<div style="font-size: 11px; color: var(--danger-color);">Failed to load: ${e.message}</div>`;
+            const errDiv = document.createElement('div');
+            errDiv.style.cssText = 'font-size: 11px; color: var(--danger-color);';
+            errDiv.textContent = `Failed to load: ${e.message}`;
+            list.innerHTML = '';
+            list.appendChild(errDiv);
         }
 
         // Add new rewrite form
@@ -4603,7 +4948,11 @@ function addGlobalStyle(css) {
             });
 
         } catch (e) {
-            container.innerHTML = `<div style="font-size:11px;color:var(--danger-color);">Failed: ${e.message}</div>`;
+            const errDiv2 = document.createElement('div');
+            errDiv2.style.cssText = 'font-size:11px;color:var(--danger-color);';
+            errDiv2.textContent = `Failed: ${e.message}`;
+            container.innerHTML = '';
+            container.appendChild(errDiv2);
         }
     }
 
@@ -4970,40 +5319,57 @@ function addGlobalStyle(css) {
         const themeBtnGroup = document.createElement('div');
         themeBtnGroup.className = 'btn-group';
 
-        const updateThemeBtns = (activeTheme) => {
-            lightBtn.classList.toggle('active', activeTheme === 'light');
-            darkBtn.classList.toggle('active', activeTheme === 'dark');
-            darkBlueBtn.classList.toggle('active', activeTheme === 'darkblue');
+        const updateThemeBtns = (activeTheme, isAuto = false) => {
+            autoThemeBtn.classList.toggle('active', isAuto);
+            lightBtn.classList.toggle('active', !isAuto && activeTheme === 'light');
+            darkBtn.classList.toggle('active', !isAuto && activeTheme === 'dark');
+            darkBlueBtn.classList.toggle('active', !isAuto && activeTheme === 'darkblue');
+        };
+
+        const autoThemeBtn = document.createElement('button');
+        autoThemeBtn.textContent = 'Auto';
+        autoThemeBtn.className = `bn-panel-button bn-btn-sm ${themeAuto ? 'active' : ''}`;
+        autoThemeBtn.onclick = async () => {
+            themeAuto = true;
+            await storage.set({ [KEY_THEME_AUTO]: true });
+            setupThemeAutoSync();
+            updateThemeBtns(currentTheme, true);
         };
 
         const lightBtn = document.createElement('button');
         lightBtn.textContent = 'Light';
-        lightBtn.className = `bn-panel-button bn-btn-sm ${currentTheme === 'light' ? 'active' : ''}`;
+        lightBtn.className = `bn-panel-button bn-btn-sm ${!themeAuto && currentTheme === 'light' ? 'active' : ''}`;
         lightBtn.onclick = async () => {
+            themeAuto = false;
             applyTheme('light');
-            await storage.set({ [KEY_THEME]: 'light' });
+            await storage.set({ [KEY_THEME]: 'light', [KEY_THEME_AUTO]: false });
+            setupThemeAutoSync();
             updateThemeBtns('light');
         };
 
         const darkBtn = document.createElement('button');
         darkBtn.textContent = 'Dark';
-        darkBtn.className = `bn-panel-button bn-btn-sm ${currentTheme === 'dark' ? 'active' : ''}`;
+        darkBtn.className = `bn-panel-button bn-btn-sm ${!themeAuto && currentTheme === 'dark' ? 'active' : ''}`;
         darkBtn.onclick = async () => {
+            themeAuto = false;
             applyTheme('dark');
-            await storage.set({ [KEY_THEME]: 'dark' });
+            await storage.set({ [KEY_THEME]: 'dark', [KEY_THEME_AUTO]: false });
+            setupThemeAutoSync();
             updateThemeBtns('dark');
         };
 
         const darkBlueBtn = document.createElement('button');
         darkBlueBtn.textContent = 'Dark Blue';
-        darkBlueBtn.className = `bn-panel-button bn-btn-sm ${currentTheme === 'darkblue' ? 'active' : ''}`;
+        darkBlueBtn.className = `bn-panel-button bn-btn-sm ${!themeAuto && currentTheme === 'darkblue' ? 'active' : ''}`;
         darkBlueBtn.onclick = async () => {
+            themeAuto = false;
             applyTheme('darkblue');
-            await storage.set({ [KEY_THEME]: 'darkblue' });
+            await storage.set({ [KEY_THEME]: 'darkblue', [KEY_THEME_AUTO]: false });
+            setupThemeAutoSync();
             updateThemeBtns('darkblue');
         };
 
-        themeBtnGroup.append(lightBtn, darkBtn, darkBlueBtn);
+        themeBtnGroup.append(autoThemeBtn, lightBtn, darkBtn, darkBlueBtn);
         themeRow.appendChild(themeBtnGroup);
         appearControls.appendChild(themeRow);
 
@@ -5393,6 +5759,99 @@ function addGlobalStyle(css) {
         filterSection.appendChild(divider);
         filterSection.appendChild(mkBtn('toggle-rawDnsLogs', 'Raw DNS Logs', 'Show raw DNS logs', () => toggleNativeCheckbox('advanced-mode', 'toggle-rawDnsLogs')));
 
+        // --- SAVED FILTERS (only on logs page) ---
+        const savedFilterDivider = document.createElement('div');
+        savedFilterDivider.className = 'bn-filter-divider';
+        filterSection.appendChild(savedFilterDivider);
+
+        const savedFilterRow = document.createElement('div');
+        savedFilterRow.className = 'bn-filter-group';
+        savedFilterRow.style.cssText = 'flex-wrap: wrap; gap: 4px;';
+
+        const savedFilterLabel = document.createElement('div');
+        savedFilterLabel.className = 'bn-section-label';
+        savedFilterLabel.textContent = 'Saved Filters';
+        savedFilterLabel.style.cssText = 'width: 100%; margin-bottom: 2px; font-size: 11px;';
+        savedFilterRow.appendChild(savedFilterLabel);
+
+        const savedFilterList = document.createElement('div');
+        savedFilterList.id = 'bn-saved-filter-list';
+        savedFilterList.style.cssText = 'display: flex; flex-wrap: wrap; gap: 3px; width: 100%;';
+        savedFilterRow.appendChild(savedFilterList);
+
+        const saveFilterBtn = document.createElement('button');
+        saveFilterBtn.textContent = '+ Save Current';
+        saveFilterBtn.className = 'bn-panel-button bn-btn-sm';
+        saveFilterBtn.style.cssText = 'font-size: 10px; padding: 3px 8px; margin-top: 2px;';
+        saveFilterBtn.onclick = () => {
+            const name = prompt('Filter preset name:');
+            if (!name || !name.trim()) return;
+            const preset = {
+                name: name.trim(),
+                filters: { ...filters },
+                timestamp: Date.now()
+            };
+            savedFilters.push(preset);
+            storage.set({ [KEY_SAVED_FILTERS]: savedFilters });
+            renderSavedFilters();
+            showToast(`Filter saved: ${name.trim()}`);
+        };
+        savedFilterRow.appendChild(saveFilterBtn);
+
+        filterSection.appendChild(savedFilterRow);
+
+        function renderSavedFilters() {
+            const listEl = document.getElementById('bn-saved-filter-list');
+            if (!listEl) return;
+            listEl.innerHTML = '';
+
+            if (savedFilters.length === 0) {
+                const hint = document.createElement('span');
+                hint.style.cssText = 'font-size: 10px; color: var(--panel-text-secondary); padding: 2px 0;';
+                hint.textContent = 'No saved filters yet';
+                listEl.appendChild(hint);
+                return;
+            }
+
+            savedFilters.forEach((preset, idx) => {
+                const wrap = document.createElement('div');
+                wrap.style.cssText = 'display: flex; align-items: center; gap: 2px;';
+
+                const btn = document.createElement('button');
+                btn.textContent = preset.name;
+                btn.className = 'bn-panel-button bn-btn-sm';
+                btn.style.cssText = 'font-size: 10px; padding: 3px 8px;';
+                btn.title = `Load filter: ${preset.name}`;
+                btn.onclick = async () => {
+                    // Apply saved filter state
+                    filters = { ...preset.filters };
+                    await storage.set({ [KEY_FILTER_STATE]: filters });
+                    updateButtonStates();
+                    updatePanelBorderColor();
+                    cleanLogs();
+                    showToast(`Filter loaded: ${preset.name}`);
+                };
+
+                const delBtn = document.createElement('button');
+                delBtn.textContent = '×';
+                delBtn.className = 'bn-panel-button bn-btn-sm';
+                delBtn.style.cssText = 'font-size: 12px; padding: 2px 5px; color: var(--danger-color);';
+                delBtn.title = `Delete filter: ${preset.name}`;
+                delBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    savedFilters.splice(idx, 1);
+                    await storage.set({ [KEY_SAVED_FILTERS]: savedFilters });
+                    renderSavedFilters();
+                    showToast(`Filter deleted: ${preset.name}`);
+                };
+
+                wrap.append(btn, delBtn);
+                listEl.appendChild(wrap);
+            });
+        }
+
+        renderSavedFilters();
+
         content.appendChild(filterSection);
 
         // --- AUTO REFRESH (only on logs page) ---
@@ -5467,7 +5926,7 @@ function addGlobalStyle(css) {
         // --- PANEL FOOTER ---
         const footer = document.createElement('div');
         footer.className = 'bn-panel-footer';
-        footer.textContent = 'BetterNext v3.5';
+        footer.textContent = `BetterNext v${chrome.runtime.getManifest().version}`;
         panel.appendChild(footer);
 
         document.body.appendChild(panel);
@@ -6100,6 +6559,7 @@ function addGlobalStyle(css) {
     async function main() {
         await initializeState();
         applyTheme(currentTheme);
+        if (themeAuto) setupThemeAutoSync();
         applyUltraCondensedMode(isUltraCondensed);
         applyListPageTheme();
         setupEscapeHandler();
